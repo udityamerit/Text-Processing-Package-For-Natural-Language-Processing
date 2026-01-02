@@ -14,7 +14,6 @@ def extract_features(x):
         'mentions_count': mentions_count(x),
         'numerics_count': numerics_count(x),
         'upper_case_count': upper_case_count(x),
-        'word_cloud': get_wordcloud(x),
         'noun_phrases': get_noun_phrase(x),
         'sentiment_analysis': sentiment_analysis(x)
     }

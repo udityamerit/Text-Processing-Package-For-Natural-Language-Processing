@@ -9,7 +9,7 @@ with open('requirements.txt') as fp:
 setuptools.setup(
     name='nlp_text_preprocessing',
     include_package_data=True,
-    version='0.0.6',  # Increment version
+    version='0.0.9',  # Increment version
     author='Uditya Narayan Tiwari',
     author_email='tiwarimerit@gmail.com',
     description='This is a Text Processing Package For NLP',

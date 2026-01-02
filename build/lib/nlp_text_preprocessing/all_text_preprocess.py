@@ -15,10 +15,17 @@ from textblob.sentiments import NaiveBayesAnalyzer
 from spacy.lang.en.stop_words import STOP_WORDS as sw
 import nltk
 
-fpath = os.path.join(os.path.dirname(__file__), 'data/contractions.json')
+fpath = os.path.join(os.path.dirname(__file__), 'data', 'contractions.json')
 contractions = json.load(open(fpath))
 
-nlp = spacy.load('en_core_web_sm')
+try:
+    nlp = spacy.load('en_core_web_sm')
+except OSError:
+    '''print("Downloading language model Use this...")
+    from spacy.cli import download
+    download('en_core_web_sm')
+    nlp = spacy.load('en_core_web_sm')'''
+    
 
 # List of NLTK packages and their corresponding resource paths for checking
 nltk_packages = [
