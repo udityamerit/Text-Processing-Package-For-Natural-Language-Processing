@@ -13,10 +13,7 @@ from textblob import TextBlob
 from textblob import Word
 from textblob.sentiments import NaiveBayesAnalyzer
 from spacy.lang.en.stop_words import STOP_WORDS as sw
-from nltk.chunk import ne_chunk
 import nltk
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize, sent_tokenize
 
 fpath = os.path.join(os.path.dirname(__file__), 'data/contractions.json')
 contractions = json.load(open(fpath))
