@@ -185,7 +185,7 @@ Here’s an example of how you might use several functions together to clean tex
 ```python
 import text_preprocessing as tp
 
-text = "I'm loving this NLP tutorial! Contact me at udemy@kgptalkie.com. Visit https://kgptalkie.com."
+text = "I'm loving this NLP tutorial! Contact me at https://www.linkedin.com/in/uditya-narayan-tiwari-562332289/  Visit https://udityanarayantiwari.netlify.app/"
 cleaned_text = tp.clean_text(text)
 print(cleaned_text)
 # Output: i am loving this nlp tutorial contact me at visit
