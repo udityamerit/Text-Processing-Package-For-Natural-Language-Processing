@@ -1,3 +1,24 @@
+Metadata-Version: 2.4
+Name: nlp_text_preprocessing
+Version: 0.0.2
+Summary: This is a Text Processing Package For NLP
+Author: Uditya Narayan Tiwari
+Author-email: tiwarimerit@gmail.com
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: license-file
+Dynamic: requires-python
+Dynamic: summary
+
 # Text Preprocessing Python Package
 
 
@@ -180,7 +201,7 @@ print(ngrams)  # Output: [('I', 'love'), ('love', 'NLP')]
 
 ### 4. Full Example: Cleaning Text
 
-Here’s an example of how you might use several functions together to clean text data:
+Hereâ€™s an example of how you might use several functions together to clean text data:
 
 ```python
 import nlp_text_preprocessing as tp

@@ -8,9 +8,9 @@ with open('requirements.txt') as fp:
     requirements = fp.read().splitlines()
 
 setuptools.setup(
-    name='text_preprocessing',
+    name='nlp_text_preprocessing',
     include_package_data=True,
-    version='0.0.1',
+    version='0.0.2',
     author='Uditya Narayan Tiwari',
     author_email='tiwarimerit@gmail.com',
     description='This is a Text Processing Package For NLP',
