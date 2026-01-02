@@ -14,7 +14,7 @@ pip install text_preprocessing
 ### Installation from GitHub
 You can install this package from GitHub as follows:
 ```
-pip install git+https://github.com/laxmimerit/text_preprocessing.git --upgrade --force-reinstall
+pip install git+https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing.git --upgrade --force-reinstall
 ```
 
 ### Uninstall the Package
@@ -28,19 +28,23 @@ pip uninstall text_preprocessing
 ### Requirements
 You need to install these python packages.
 ```
-pip install spacy==3.7.6
-python -m spacy download en_core_web_sm==3.7.1
-pip install nltk==3.9.1
-pip install beautifulsoup4==3.2.2
-pip install textblob==0.18.0.post0
+python -m spacy download en_core_web_sm
+spacy
+textblob
+beautifulsoup4
+nltk
+openpyxl
+SpeechRecognition==3.10.4
+pyaudio==0.2.14
+PrettyTable
+scikit-learn
+wordcloud
+lxml
+pandas
+numpy
+matplotlib
 ```
 
-### Download NLTK Data
-If you are using this package first time then You need to download NLTK data as follows:
-```
-import text_preprocessing as tp
-tp.download_nltk_data()
-```
 
 ## How to Use the Package
 
