@@ -13,11 +13,25 @@ from textblob import TextBlob
 from textblob import Word
 from textblob.sentiments import NaiveBayesAnalyzer
 from spacy.lang.en.stop_words import STOP_WORDS as sw
+from nltk.chunk import ne_chunk
+import nltk
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize, sent_tokenize
 
 fpath = os.path.join(os.path.dirname(__file__), 'data/contractions.json')
 contractions = json.load(open(fpath))
 
 nlp = spacy.load('en_core_web_sm')
+
+def download_nltk_package():
+        nltk.download('punkt_tab')
+        nltk.download('stopwords')
+        nltk.download('averaged_perceptron_tagger')
+        nltk.download('tagsets_json')
+        nltk.download('wordnet')
+        nltk.download('words')
+        nltk.download('maxent_ne_chunker_tab')
+
 # General Feature Extraction
 
 def word_count(x):
