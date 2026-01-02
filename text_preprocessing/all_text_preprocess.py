@@ -23,14 +23,35 @@ contractions = json.load(open(fpath))
 
 nlp = spacy.load('en_core_web_sm')
 
-def download_nltk_package():
-        nltk.download('punkt_tab')
-        nltk.download('stopwords')
-        nltk.download('averaged_perceptron_tagger')
-        nltk.download('tagsets_json')
-        nltk.download('wordnet')
-        nltk.download('words')
-        nltk.download('maxent_ne_chunker_tab')
+# List of NLTK packages and their corresponding resource paths for checking
+nltk_packages = [
+    ('punkt_tab', 'tokenizers/punkt_tab'),
+    ('stopwords', 'corpora/stopwords'),
+    ('averaged_perceptron_tagger', 'taggers/averaged_perceptron_tagger'),
+    ('tagsets_json', 'help/tagsets_json'),
+    ('wordnet', 'corpora/wordnet'),
+    ('words', 'corpora/words'),
+    ('maxent_ne_chunker_tab', 'chunkers/maxent_ne_chunker_tab'),
+]
+
+def download_nltk_packages():
+    """
+    Downloads the required NLTK packages.
+    """
+    for package, _ in nltk_packages:
+        nltk.download(package)
+
+# Check if NLTK packages are present; if not, instruct the user to download them
+missing_packages = []
+for package, resource in nltk_packages:
+    try:
+        nltk.data.find(resource)
+    except LookupError:
+        missing_packages.append(package)
+
+if missing_packages:
+    print(f"Warning: The following NLTK packages are missing: {', '.join(missing_packages)}")
+    print("Please run the 'download_nltk_packages()' function to download them.")
 
 # General Feature Extraction
 
