@@ -1,5 +1,6 @@
 # Text Preprocessing Python Package
 
+![alt text](<NLP Text Preprocessing.PNG>)
 
 #### Course Link: [Introduction to NLP](https://bit.ly/intro_nlp)
 
