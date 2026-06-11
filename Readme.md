@@ -4,6 +4,12 @@
 
 #### Course Link: [Introduction to NLP](https://bit.ly/intro_nlp)
 
+---
+<p align="center">
+  <img src="nlp.png" alt="Uditya Coding Animation" width="100%">
+</p>
+---
+
 This Python package is created by [Uditya Narayan Tiwari](https://youtube.com/kgptalkie). It provides various text preprocessing utilities for natural language processing (NLP) tasks.
 
 ### Installation from PyPi
