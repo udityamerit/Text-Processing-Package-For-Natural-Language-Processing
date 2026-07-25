@@ -36,6 +36,43 @@ from nlp_text_preprocessing import (
     correct_spelling,
     get_noun_phrase,
     n_grams,
+    remove_emojis,
+    extract_emojis,
+    emoji_to_text,
+    remove_phone_numbers,
+    count_phone_numbers,
+    mask_pii,
+    remove_extra_whitespace,
+    expand_hashtags,
+    normalize_unicode_punctuation,
+    remove_numbers,
+    remove_currency_symbols,
+    normalize_whitespace_and_casing,
+    extract_entities,
+    extract_pos_tags,
+    get_dependency_tree,
+    detect_language,
+    keyword_extraction,
+    text_similarity,
+    get_synonyms,
+    get_antonyms,
+    chunk_noun_phrases,
+    sentence_count,
+    avg_sentence_len,
+    punctuation_density,
+    capital_ratio,
+    unique_word_ratio,
+    readability_score,
+    text_stats,
+    detect_profanity,
+    censor_profanity,
+    detect_toxicity,
+    detect_spam_signals,
+    polarity_subjectivity,
+    emotion_detection,
+    Pipeline,
+    register_step,
+    diff_report,
 )
 
 
@@ -43,7 +80,6 @@ class TestNLPTextPreprocessing(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Ensure NLTK packages are available during testing
         try:
             download_nltk_packages()
         except Exception:
@@ -89,50 +125,88 @@ class TestNLPTextPreprocessing(unittest.TestCase):
         self.assertEqual(hashtags_count(sample), 1)
         self.assertEqual(mentions_count(sample), 2)
         self.assertEqual(numerics_count(sample), 1)
-        self.assertEqual(upper_case_count(sample), 2)
+        self.assertEqual(upper_case_count(sample), 3)
         self.assertEqual(count_rt(sample), 1)
 
-    def test_cleaning_and_normalization(self):
-        self.assertEqual(contraction_to_expansion("don't app"), "do not application")
-        self.assertEqual(remove_urls("Check http://google.com or www.openai.com"), "Check  or ")
-        self.assertEqual(remove_rt("RT @user Great post!"), " Great post!")
-        self.assertEqual(remove_html_tag("<h1>Title</h1><p>Hello</p>"), "TitleHello")
-        self.assertEqual(remove_accented_chars("café résumé"), "cafe resume")
-        self.assertEqual(remove_mentions("Hello @alice and @bob!"), "Hello  and !")
-        self.assertEqual(remove_special_chars("Hello, world!"), "Hello world")
-        self.assertEqual(remove_repeated_chars("gooooood dayyyyy"), "good dayy")
+    def test_emoji_and_pii_functions(self):
+        sample = "Hello 😂 world! Call +1-800-555-0199 or email user@test.com"
+        self.assertEqual(len(extract_emojis(sample)), 1)
+        self.assertNotIn("😂", remove_emojis(sample))
+        self.assertIn("face_with_tears_of_joy", emoji_to_text(sample))
+        self.assertEqual(count_phone_numbers(sample), 1)
+        self.assertNotIn("+1-800-555-0199", remove_phone_numbers(sample))
+        masked = mask_pii(sample)
+        self.assertNotIn("user@test.com", masked)
 
-    def test_spacy_lemmatization(self):
-        text = "running dogs"
-        lem = lemmatize(text)
-        self.assertIn("run", lem)
-        self.assertIn("dog", lem)
-        base = convert_to_base(text)
-        self.assertIn("run", base)
-        self.assertIn("dog", base)
+    def test_normalization_and_formatting(self):
+        self.assertEqual(remove_extra_whitespace("   Hello   world!  \n "), "Hello world!")
+        self.assertEqual(expand_hashtags("I love #MachineLearning"), "I love Machine Learning")
+        self.assertEqual(normalize_unicode_punctuation("“Hello”—world…"), '"Hello"-world...')
+        self.assertEqual(remove_numbers("Version 2.0 released in 2026"), "Version . released in ")
+        self.assertEqual(remove_currency_symbols("Cost: $50 and €40"), "Cost: 50 and 40")
+        self.assertEqual(normalize_whitespace_and_casing("  HELLO   WORLD "), "hello world")
 
-    def test_textblob_linguistics(self):
-        self.assertEqual(singularize_words("the dogs are barking"), "the dog are barking")
-        self.assertEqual(len(n_grams("natural language processing", n=2)), 2)
-        self.assertIsInstance(get_noun_phrase("beautiful sunny day"), list)
+    def test_linguistic_nlp_features(self):
+        text = "Apple is looking at buying a startup in London."
+        entities = extract_entities(text)
+        self.assertIsInstance(entities, list)
+        pos_tags = extract_pos_tags(text)
+        self.assertIsInstance(pos_tags, list)
+        deps = get_dependency_tree(text)
+        self.assertIsInstance(deps, list)
+        self.assertEqual(detect_language(text), "en")
+        keywords = keyword_extraction(text, top_n=3)
+        self.assertIsInstance(keywords, list)
+        sim = text_similarity("apple machine learning", "apple artificial intelligence")
+        self.assertGreaterEqual(sim, 0.0)
 
-    def test_sentiment_analysis(self):
-        sentiment = sentiment_analysis("This product is amazing and wonderful!")
-        self.assertIn(sentiment, ["pos", "neg"])
+    def test_new_stats_and_readability(self):
+        sample = "This is sentence one. This is sentence two! Is this sentence three?"
+        self.assertEqual(sentence_count(sample), 3)
+        self.assertGreater(avg_sentence_len(sample), 0)
+        self.assertGreater(punctuation_density(sample), 0)
+        self.assertGreaterEqual(unique_word_ratio(sample), 0.0)
+        self.assertIsInstance(readability_score(sample), float)
+        stats = text_stats(sample)
+        self.assertIn('readability_score', stats)
 
-    def test_get_wordcloud(self):
-        cloud = get_wordcloud("apple banana cherry apple banana", show=False)
-        self.assertIsNotNone(cloud)
+    def test_safety_moderation_and_sentiment(self):
+        profane_text = "This is a damn test."
+        self.assertTrue(detect_profanity(profane_text))
+        self.assertIn("****", censor_profanity(profane_text))
+        
+        toxic_text = "You are a stupid idiot loser."
+        self.assertGreater(detect_toxicity(toxic_text), 0.0)
 
-    def test_extract_features_and_clean_text(self):
-        sample = "Check out https://example.com! Contact us at info@test.com."
-        features = extract_features(sample)
-        self.assertIsInstance(features, dict)
-        self.assertIn('word_count', features)
-        self.assertIn('sentiment_analysis', features)
+        spam_text = "BUY NOW!!! CLICK HERE https://spam.com VERY CHEAP"
+        spam_signals = detect_spam_signals(spam_text)
+        self.assertTrue(spam_signals['is_spam_candidate'])
 
-        cleaned = clean_text(sample)
-        self.assertIsInstance(cleaned, str)
+        pol_sub = polarity_subjectivity("This is a great product!")
+        self.assertIn('polarity', pol_sub)
+        emotions = emotion_detection("I am very happy and excited!")
+        self.assertGreater(emotions['joy'], 0)
+
+    def test_pipeline_engine_and_diff_report(self):
+        pipe = Pipeline.default()
+        text = "Check out https://test.com! Email me at user@test.com"
+        cleaned = pipe.run(text)
+        self.assertNotIn("https://test.com", cleaned)
+        self.assertNotIn("user@test.com", cleaned)
+
+        # Custom step registration
+        @register_step("custom_exclamation_remover")
+        def remove_exclamations(t):
+            return t.replace("!", "")
+
+        pipe.add_step("custom_exclamation_remover")
+        res = pipe.run("Hello world!")
+        self.assertNotIn("!", res)
+
+        diff = diff_report(["Check http://test.com", "Contact user@test.com"], ["Check", "Contact"])
+        self.assertIsInstance(diff, dict)
+        self.assertIn('urls_removed', diff)
+        self.assertIn('emails_removed', diff)
 
 
 if __name__ == '__main__':

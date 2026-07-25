@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: nlp_text_preprocessing
-Version: 0.1.2
+Version: 0.2.0
 Summary: This is a Text Processing Package For NLP
 Author: Uditya Narayan Tiwari
 Author-email: tiwarimerit@gmail.com
@@ -66,16 +66,19 @@ Dynamic: summary
 - [Key Features](#key-features)
 - [Architecture Diagram](#architecture-diagram)
 - [Quickstart and Setup](#quickstart-and-setup)
+- [Pipeline Automation Engine](#pipeline-automation-engine)
 - [Complete API Reference](#complete-api-reference)
   - [1. General Feature Extraction](#1-general-feature-extraction)
   - [2. Text Cleaning and Normalization](#2-text-cleaning-and-normalization)
   - [3. Linguistic and Morphological Processing](#3-linguistic-and-morphological-processing)
-  - [4. Visualization Suite](#4-visualization-suite)
+  - [4. Safety, Moderation and Sentiment](#4-safety-moderation-and-sentiment)
+  - [5. Visualization Suite](#5-visualization-suite)
 - [Code Examples](#code-examples)
   - [Basic Text Cleaning](#1-basic-text-cleaning)
-  - [Pandas DataFrame Integration](#2-pandas-dataframe-integration)
-  - [Batch Feature Extraction](#3-batch-feature-extraction)
-  - [WordCloud Generation](#4-wordcloud-generation)
+  - [Pipeline Engine Usage](#2-pipeline-engine-usage)
+  - [Pandas DataFrame Integration](#3-pandas-dataframe-integration)
+  - [Batch Feature Extraction](#4-batch-feature-extraction)
+  - [WordCloud Generation](#5-wordcloud-generation)
 - [Troubleshooting and Resource Setup](#troubleshooting-and-resource-setup)
 - [License and Author](#license-and-author)
 
@@ -83,20 +86,22 @@ Dynamic: summary
 
 ## Package Overview
 
-**`nlp_text_preprocessing`** is a production-grade, modular Python library designed to streamline text cleaning, feature extraction, linguistic analysis, and visualization for Natural Language Processing (NLP) pipelines and Machine Learning workflows.
+**`nlp_text_preprocessing`** is a production-grade, modular Python library designed to streamline text cleaning, feature extraction, linguistic analysis, content moderation, and visualization for Natural Language Processing (NLP) pipelines and Machine Learning workflows.
 
-It provides **34 single-purpose functions** with built-in defensive guards for `None`, `NaN`, and missing values, making it 100% crash-proof when running over Pandas DataFrames or large raw text datasets.
+It provides over **60 single-purpose functions** and an extensible **Pipeline Engine** with built-in defensive guards for `None`, `NaN`, and missing values, making it 100% crash-proof when running over Pandas DataFrames or large raw text datasets.
 
 ---
 
 ## Key Features
 
 - **Crash-Proof Pipeline**: Automatic `None`/`NaN` input sanitation across all functions.
+- **Pipeline Automation Engine**: Chain cleaning steps by name or custom functions via `Pipeline(['to_lower_case', 'remove_urls', 'lemmatize'])`.
 - **Lazy and Fast Model Caching**: Efficient lazy-loading for spaCy (`en_core_web_sm`) and cached NaiveBayes sentiment analyzers.
-- **Comprehensive Cleaning**: Strip emails, URLs, HTML, retweets, special symbols, and expand contractions.
-- **Feature Extraction**: Extract word counts, character counts, uppercase counts, numerics, hashtags, mentions, and full feature matrices in one call.
-- **Linguistic Utilities**: Perform lemmatization, noun phrase extraction, spelling correction, n-grams, singularization, and pluralization.
-- **Flexible Visualizations**: Generate and save custom WordClouds to disk or display interactively.
+- **Advanced Cleaning**: Remove emojis, phone numbers, PII mask, URLs, emails, HTML, retweets, special symbols, and expand contractions/hashtags.
+- **Feature & Readability Extraction**: Extract word counts, sentence counts, readability scores (Flesch Ease), punctuation density, capital ratios, and full batch statistics.
+- **Linguistic Utilities**: Named Entity Recognition (NER), POS tagging, dependency parsing, language detection, keyword extraction, synonyms, antonyms, and n-grams.
+- **Safety & Moderation**: Profanity detection/censoring, toxicity scores, and spam signal detection.
+- **Visualization**: Generate and save custom WordClouds to disk or display interactively.
 
 ---
 
@@ -131,9 +136,42 @@ tp.download_nltk_packages()
 
 ---
 
+## Pipeline Automation Engine
+
+The `Pipeline` class allows chaining cleaning and transformation steps cleanly:
+
+```python
+import nlp_text_preprocessing as tp
+
+# 1. Create default zero-config pipeline
+pipe = tp.Pipeline.default()
+
+# 2. Or build a custom step pipeline
+pipe = tp.Pipeline([
+    'to_lower_case',
+    'expand_hashtags',
+    'remove_urls',
+    'remove_emails',
+    'remove_extra_whitespace',
+    'lemmatize'
+])
+
+# Process single text
+clean_result = pipe.run("Check out #MachineLearning at https://example.com!")
+
+# Process batch list or Pandas Series
+clean_batch = pipe.run_batch(["Text 1", "Text 2"])
+clean_series = pipe.run_series(df['text_column'])
+
+# Generate diff report of changes
+report = tp.diff_report(raw_texts, clean_batch)
+```
+
+---
+
 ## Complete API Reference
 
-Below is the complete reference guide for all **34 functions** available in the library:
+Below is the complete reference guide for all functions available in the library:
 
 ### 1. General Feature Extraction
 
@@ -143,11 +181,18 @@ Below is the complete reference guide for all **34 functions** available in the 
 | `char_count(x)` | `x: str` | `int` | Returns total characters excluding spaces. |
 | `avg_word_len(x)` | `x: str` | `float` | Returns average word length (`0.0` for empty inputs). |
 | `stop_words_count(x)` | `x: str` | `int` | Returns count of stop words (case-insensitive). |
+| `sentence_count(x)` | `x: str` | `int` | Returns total number of sentences. |
+| `avg_sentence_len(x)` | `x: str` | `float` | Returns average sentence length in words. |
+| `punctuation_density(x)`| `x: str` | `float` | Returns proportion of punctuation characters in text. |
+| `capital_ratio(x)` | `x: str` | `float` | Returns proportion of uppercase words relative to total words. |
+| `unique_word_ratio(x)` | `x: str` | `float` | Returns lexical diversity ratio (unique words / total words). |
+| `readability_score(x)` | `x: str` | `float` | Calculates Flesch Reading Ease score. |
 | `hashtags_count(x)` | `x: str` | `int` | Returns count of hashtag tokens (`#tag`). |
 | `mentions_count(x)` | `x: str` | `int` | Returns count of user handle mentions (`@user`). |
 | `numerics_count(x)` | `x: str` | `int` | Returns count of numeric tokens. |
 | `upper_case_count(x)` | `x: str` | `int` | Returns count of uppercase words. |
-| `extract_features(x)` | `x: str` | `dict` | Returns a dictionary containing all extracted feature counts at once. |
+| `text_stats(x)` | `x: str` | `dict` | Returns a dictionary containing all extracted feature statistics at once. |
+| `text_stats_batch(df, col)`| `df, col` | `DataFrame` | Returns a DataFrame of stats for a pandas DataFrame column. |
 
 ---
 
@@ -169,7 +214,19 @@ Below is the complete reference guide for all **34 functions** available in the 
 | `remove_special_chars(x)` | `x: str` | `str` | Strips punctuation and special symbols. |
 | `remove_repeated_chars(x)` | `x: str` | `str` | Truncates repeated characters beyond 2 consecutive occurrences. |
 | `remove_stop_words(x)` | `x: str` | `str` | Case-insensitive removal of stop words while preserving word case. |
-| `clean_text(text)` | `text: str` | `str` | Runs end-to-end cleaning pipeline (lowercasing, contractions, emails, URLs, HTML, special chars, lemmatization). |
+| `remove_emojis(x)` | `x: str` | `str` | Strips emoji characters from text. |
+| `extract_emojis(x)` | `x: str` | `list[str]` | Returns list of emojis found in text. |
+| `emoji_to_text(x)` | `x: str` | `str` | Converts emojis to descriptive text (e.g. 😂 -> `face_with_tears_of_joy`). |
+| `remove_phone_numbers(x)` | `x: str` | `str` | Strips phone numbers from text. |
+| `count_phone_numbers(x)` | `x: str` | `int` | Counts phone numbers present in text. |
+| `mask_pii(x)` | `x: str` | `str` | Redacts emails, phone numbers, and card numbers with `[REDACTED]`. |
+| `remove_extra_whitespace(x)`| `x: str` | `str` | Collapses consecutive spaces, tabs, and newlines to a single space. |
+| `expand_hashtags(x)` | `x: str` | `str` | Splits camelCase/PascalCase hashtags (`#MachineLearning` -> `Machine Learning`). |
+| `normalize_unicode_punctuation(x)`| `x: str` | `str` | Replaces smart quotes, em-dashes, and ellipsis with ASCII equivalents. |
+| `remove_numbers(x)` | `x: str` | `str` | Strips all numeric digits. |
+| `remove_currency_symbols(x)`| `x: str` | `str` | Strips currency symbols (`$`, `€`, `₹`, `£`, `¥`). |
+| `normalize_whitespace_and_casing(x)`| `x: str` | `str` | Canonical combination of lowercasing and whitespace collapse. |
+| `clean_text(text)` | `text: str` | `str` | Runs end-to-end cleaning pipeline. |
 
 ---
 
@@ -179,16 +236,38 @@ Below is the complete reference guide for all **34 functions** available in the 
 | :--- | :--- | :--- | :--- |
 | `convert_to_base(x)` | `x: str` | `str` | Lemmatizes nouns and verbs via spaCy while keeping other POS tags. |
 | `lemmatize(x)` | `x: str` | `str` | Performs full lemmatization across all tokens via spaCy. |
+| `extract_entities(x)` | `x: str` | `list[tuple]` | Extracts named entities `(text, label)` using spaCy. |
+| `extract_pos_tags(x)` | `x: str` | `list[tuple]` | Extracts full POS tag breakdown `(token, pos, tag)` using spaCy. |
+| `get_dependency_tree(x)`| `x: str` | `list[tuple]` | Extracts dependency parse tree `(token, dep, head)` using spaCy. |
+| `detect_language(x)` | `x: str` | `str` | Detects language code (`'en'`, `'fr'`, etc.) using TextBlob. |
+| `keyword_extraction(x, top_n)`| `x: str, top_n: int`| `list[str]`| Extracts top N keywords by term frequency. |
+| `text_similarity(x1, x2)` | `x1, x2` | `float` | Calculates token Jaccard similarity between two texts (0.0 to 1.0). |
+| `get_synonyms(word)` | `word: str` | `list[str]` | Returns list of synonyms from WordNet. |
+| `get_antonyms(word)` | `word: str` | `list[str]` | Returns list of antonyms from WordNet. |
+| `chunk_noun_phrases(x)` | `x: str` | `list[dict]` | Extracts noun phrases with character start/end spans. |
 | `correct_spelling(x)` | `x: str` | `str` | Corrects word spelling using TextBlob model. |
 | `get_noun_phrase(x)` | `x: str` | `list[str]` | Extracts noun phrases from text. |
 | `n_grams(x, n=2)` | `x: str, n: int` | `list` | Generates word-level n-grams. |
 | `singularize_words(x)` | `x: str` | `str` | Converts plural nouns (`NNS`) into singular forms. |
 | `pluralize_words(x)` | `x: str` | `str` | Converts singular nouns (`NN`) into plural forms. |
-| `sentiment_analysis(x)` | `x: str` | `str` | Returns sentiment classification (`'pos'` / `'neg'`) using cached NaiveBayes model. |
 
 ---
 
-### 4. Visualization Suite
+### 4. Safety, Moderation and Sentiment
+
+| Function | Parameters | Return Type | Description |
+| :--- | :--- | :--- | :--- |
+| `detect_profanity(x)` | `x: str` | `bool` | Returns True if text contains profanity words. |
+| `censor_profanity(x)` | `x: str` | `str` | Censors profanity words with asterisks (`****`). |
+| `detect_toxicity(x)` | `x: str` | `float` | Calculates baseline toxicity score (0.0 to 1.0). |
+| `detect_spam_signals(x)` | `x: str` | `dict` | Returns spam flags for excessive caps, punctuation, and URL density. |
+| `sentiment_analysis(x)` | `x: str` | `str` | Returns sentiment classification (`'pos'` / `'neg'`) using cached NaiveBayes model. |
+| `polarity_subjectivity(x)`| `x: str` | `dict` | Returns fast pattern-based sentiment polarity (-1.0 to 1.0) and subjectivity. |
+| `emotion_detection(x)` | `x: str` | `dict` | Calculates lexicon-based emotion counts (joy, anger, sadness, fear). |
+
+---
+
+### 5. Visualization Suite
 
 | Function | Parameters | Return Type | Description |
 | :--- | :--- | :--- | :--- |
@@ -210,7 +289,20 @@ print(cleaned)
 # Output: check out contact support company org or i am love nlp
 ```
 
-### 2. Pandas DataFrame Integration
+### 2. Pipeline Engine Usage
+
+```python
+import nlp_text_preprocessing as tp
+
+# Build custom pipeline
+pipe = tp.Pipeline(['to_lower_case', 'expand_hashtags', 'remove_urls', 'remove_extra_whitespace'])
+
+text = "Check out #MachineLearning at https://example.com!"
+print(pipe.run(text))
+# Output: check out machine learning at!
+```
+
+### 3. Pandas DataFrame Integration
 
 All functions seamlessly support Pandas `.apply()` and handle missing values (`NaN`/`None`):
 
@@ -233,7 +325,7 @@ df['clean_text'] = df['text'].apply(tp.clean_text)
 df['word_count'] = df['text'].apply(tp.word_count)
 ```
 
-### 3. Batch Feature Extraction
+### 4. Batch Feature Extraction
 
 Extract full feature matrices directly into Pandas columns:
 
@@ -243,12 +335,12 @@ import nlp_text_preprocessing as tp
 
 df = pd.DataFrame({'text': ["Hello #world! Visit https://example.com", "Contact user@test.com"]})
 
-# Extract all features into a new DataFrame
-features_df = df['text'].apply(tp.extract_features).apply(pd.Series)
-print(features_df)
+# Extract all summary stats into a new DataFrame
+stats_df = tp.text_stats_batch(df, 'text')
+print(stats_df)
 ```
 
-### 4. WordCloud Generation
+### 5. WordCloud Generation
 
 ```python
 import nlp_text_preprocessing as tp
