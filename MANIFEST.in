@@ -1,1 +1,3 @@
+include Readme.md
+include requirements.txt
 include nlp_text_preprocessing/data/contractions.json

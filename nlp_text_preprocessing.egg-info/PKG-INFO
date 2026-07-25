@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: nlp_text_preprocessing
-Version: 0.0.9
+Version: 0.1.0
 Summary: This is a Text Processing Package For NLP
 Author: Uditya Narayan Tiwari
 Author-email: tiwarimerit@gmail.com
@@ -35,7 +35,22 @@ Dynamic: requires-python
 Dynamic: summary
 
 # Text Preprocessing Python Package
+<p align="center">
+  <a href="https://pypi.org/project/nlp-text-preprocessing/">
+    <img src="https://img.shields.io/pypi/v/nlp-text-preprocessing" alt="PyPI Version">
+  </a>
+  <a href="https://pypi.org/project/nlp-text-preprocessing/">
+    <img src="https://img.shields.io/pypi/pyversions/nlp-text-preprocessing" alt="Python Version">
+  </a>
+  <a href="https://pepy.tech/projects/nlp-text-preprocessing">
+    <img src="https://static.pepy.tech/badge/nlp-text-preprocessing" alt="Total Downloads">
+  </a>
+  <a href="https://pepy.tech/projects/nlp-text-preprocessing">
+    <img src="https://static.pepy.tech/badge/nlp-text-preprocessing/month" alt="Monthly Downloads">
+  </a>
+</p>
 
+![alt text](<NLP Text Preprocessing.PNG>)
 
 #### Course Link: [Introduction to NLP](https://bit.ly/intro_nlp)
 
@@ -216,7 +231,7 @@ print(ngrams)  # Output: [('I', 'love'), ('love', 'NLP')]
 
 ### 4. Full Example: Cleaning Text
 
-Hereâ€™s an example of how you might use several functions together to clean text data:
+Here’s an example of how you might use several functions together to clean text data:
 
 ```python
 import nlp_text_preprocessing as tp

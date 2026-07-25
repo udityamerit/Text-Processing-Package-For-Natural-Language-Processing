@@ -1,4 +1,18 @@
 # Text Preprocessing Python Package
+<p align="center">
+  <a href="https://pypi.org/project/nlp-text-preprocessing/">
+    <img src="https://img.shields.io/pypi/v/nlp-text-preprocessing" alt="PyPI Version">
+  </a>
+  <a href="https://pypi.org/project/nlp-text-preprocessing/">
+    <img src="https://img.shields.io/pypi/pyversions/nlp-text-preprocessing" alt="Python Version">
+  </a>
+  <a href="https://pepy.tech/projects/nlp-text-preprocessing">
+    <img src="https://static.pepy.tech/badge/nlp-text-preprocessing" alt="Total Downloads">
+  </a>
+  <a href="https://pepy.tech/projects/nlp-text-preprocessing">
+    <img src="https://static.pepy.tech/badge/nlp-text-preprocessing/month" alt="Monthly Downloads">
+  </a>
+</p>
 
 ![alt text](<NLP Text Preprocessing.PNG>)
 

@@ -1,5 +1,7 @@
 LICENSE
 MANIFEST.in
+Readme.md
+requirements.txt
 setup.py
 nlp_text_preprocessing/__init__.py
 nlp_text_preprocessing/all_text_preprocess.py
