@@ -9,12 +9,18 @@ with open('requirements.txt') as fp:
 setuptools.setup(
     name='nlp_text_preprocessing',
     include_package_data=True,
-    version='0.2.0',
+    version='0.2.1',
     author='Uditya Narayan Tiwari',
     author_email='tiwarimerit@gmail.com',
     description='This is a Text Processing Package For NLP',
     long_description=long_description,
     long_description_content_type='text/markdown',
+    url='https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing',
+    project_urls={
+        'Author Website': 'https://udityanarayantiwari.netlify.app/',
+        'Source Code': 'https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing',
+        'Bug Tracker': 'https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing/issues',
+    },
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

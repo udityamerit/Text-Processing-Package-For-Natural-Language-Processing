@@ -52,6 +52,8 @@
 
 **`nlp_text_preprocessing`** is a production-grade, modular Python library designed to streamline text cleaning, feature extraction, linguistic analysis, content moderation, and visualization for Natural Language Processing (NLP) pipelines and Machine Learning workflows.
 
+Maintained by **[Uditya Narayan Tiwari](https://udityanarayantiwari.netlify.app/)**.
+
 It provides over **60 single-purpose functions** and an extensible **Pipeline Engine** with built-in defensive guards for `None`, `NaN`, and missing values, making it 100% crash-proof when running over Pandas DataFrames or large raw text datasets.
 
 ---
@@ -335,5 +337,5 @@ python -m spacy download en_core_web_sm
 
 ## License and Author
 
-- **Author**: [Uditya Narayan Tiwari](https://youtube.com/kgptalkie)
+- **Author**: [Uditya Narayan Tiwari](https://udityanarayantiwari.netlify.app/)
 - **License**: MIT License ([LICENSE](LICENSE))

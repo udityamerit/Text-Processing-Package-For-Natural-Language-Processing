@@ -1,9 +1,13 @@
 Metadata-Version: 2.4
 Name: nlp_text_preprocessing
-Version: 0.2.0
+Version: 0.2.1
 Summary: This is a Text Processing Package For NLP
+Home-page: https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing
 Author: Uditya Narayan Tiwari
 Author-email: tiwarimerit@gmail.com
+Project-URL: Author Website, https://udityanarayantiwari.netlify.app/
+Project-URL: Source Code, https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing
+Project-URL: Bug Tracker, https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing/issues
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
@@ -29,7 +33,9 @@ Dynamic: author-email
 Dynamic: classifier
 Dynamic: description
 Dynamic: description-content-type
+Dynamic: home-page
 Dynamic: license-file
+Dynamic: project-url
 Dynamic: requires-dist
 Dynamic: requires-python
 Dynamic: summary
@@ -87,6 +93,8 @@ Dynamic: summary
 ## Package Overview
 
 **`nlp_text_preprocessing`** is a production-grade, modular Python library designed to streamline text cleaning, feature extraction, linguistic analysis, content moderation, and visualization for Natural Language Processing (NLP) pipelines and Machine Learning workflows.
+
+Maintained by **[Uditya Narayan Tiwari](https://udityanarayantiwari.netlify.app/)**.
 
 It provides over **60 single-purpose functions** and an extensible **Pipeline Engine** with built-in defensive guards for `None`, `NaN`, and missing values, making it 100% crash-proof when running over Pandas DataFrames or large raw text datasets.
 
@@ -371,5 +379,5 @@ python -m spacy download en_core_web_sm
 
 ## License and Author
 
-- **Author**: [Uditya Narayan Tiwari](https://youtube.com/kgptalkie)
+- **Author**: [Uditya Narayan Tiwari](https://udityanarayantiwari.netlify.app/)
 - **License**: MIT License ([LICENSE](LICENSE))
