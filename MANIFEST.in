@@ -1,3 +1,5 @@
 include Readme.md
 include requirements.txt
+include nlp_banner.png
+include architecture_diagram.png
 include nlp_text_preprocessing/data/contractions.json
