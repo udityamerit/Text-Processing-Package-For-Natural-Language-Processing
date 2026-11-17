@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- New optional extra `[transformers]` (installs `transformers`, for tokenizers used with `truncate_text` / `chunk_text`).
+
+### Fixed
+- `sentence_count` / `avg_sentence_len` no longer split after common abbreviations (`Dr.`, `Mr.`, `vs.`, `e.g.`) or single-letter initials (`J. K. Rowling`).
+- `lemmatize` keeps pronouns as written (`me` is no longer turned into `I`).
+
 ## 0.4.0
 
 ### Added

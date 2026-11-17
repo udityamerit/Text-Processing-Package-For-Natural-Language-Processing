@@ -44,6 +44,7 @@ dependencies = [
 pandas = ["pandas"]
 viz = ["wordcloud", "matplotlib"]
 sklearn = ["scikit-learn"]
+transformers = ["transformers"]
 all = ["pandas", "wordcloud", "matplotlib", "scikit-learn"]
 dev = ["pytest", "build", "twine", "pandas", "wordcloud", "matplotlib", "scikit-learn"]
 

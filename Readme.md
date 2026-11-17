@@ -185,6 +185,7 @@ tp.light_clean("<p>Great &amp; fast!​ Visit https://x.com or mail me@x.com</p>
 # 'Great & fast! Visit [URL] or mail [EMAIL]'
 
 # Use the real tokenizer so the limits are counted in model tokens
+# (pip install "nlp-text-preprocessing[transformers]")
 from transformers import AutoTokenizer
 tok = AutoTokenizer.from_pretrained('bert-base-uncased')
 

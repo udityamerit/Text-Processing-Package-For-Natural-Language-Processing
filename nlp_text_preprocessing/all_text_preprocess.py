@@ -442,13 +442,38 @@ def upper_case_count(x):
     text = _clean_input(x)
     return len([word for word in text.split() if len(word) > 1 and word.isupper()])
 
+_NON_TERMINAL_ABBREVIATIONS = frozenset({
+    'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'mt', 'vs', 'capt', 'col', 'gen', 'gov',
+    'lt', 'sgt', 'rev', 'hon', 'fig', 'no', 'inc', 'ltd', 'co', 'corp', 'e.g', 'i.e', 'cf',
+})
+_SENTENCE_END_RE = re.compile(r'(\S*?)([.!?]+)(?=\s|$)')
+
+
 def sentence_count(x):
-    """Returns the number of sentences in text x (a '.' inside 3.14 or e.g.com does not split)."""
+    """
+    Returns the number of sentences in text x.
+
+    A '.' inside 3.14 or e.g.com does not split, and neither does one after a common abbreviation
+    ("Dr.", "Mr.", "vs.", "e.g.") or a single-letter initial ("J. K. Rowling") that is followed by more text.
+    """
     text = _clean_input(x)
     if not text.strip():
         return 0
-    sentences = re.split(r'[.!?]+(?=\s|$)', text)
-    return len([s for s in sentences if s.strip()])
+    count = 0
+    last_end = 0
+    for match in _SENTENCE_END_RE.finditer(text):
+        word, punct = match.group(1), match.group(2)
+        rest = text[match.end():].strip()
+        if punct == '.' and rest:
+            bare = word.strip('()[]"\'').lower()
+            if bare in _NON_TERMINAL_ABBREVIATIONS or (len(bare) == 1 and bare.isalpha()):
+                continue
+        if text[last_end:match.end()].strip(' .!?'):
+            count += 1
+        last_end = match.end()
+    if text[last_end:].strip(' .!?'):
+        count += 1
+    return count
 
 def avg_sentence_len(x):
     """Returns average sentence length in words."""
@@ -737,7 +762,10 @@ def _join_tokens(doc, attr='lemma_', only_pos=None):
     """Rebuilds text from a spaCy doc keeping the original spacing (no "word ." artefacts)."""
     parts = []
     for token in doc:
-        if only_pos is None or token.pos_ in only_pos:
+        # Pronouns are kept as written: spaCy lemmatizes "me"/"him"/"us" to "I"/"he"/"we".
+        if token.pos_ == 'PRON' and only_pos is None:
+            parts.append(token.text_with_ws)
+        elif only_pos is None or token.pos_ in only_pos:
             parts.append(getattr(token, attr) + token.whitespace_)
         else:
             parts.append(token.text_with_ws)
