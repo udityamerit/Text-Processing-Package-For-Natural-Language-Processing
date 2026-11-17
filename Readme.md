@@ -27,6 +27,7 @@
 ## Table of Contents
 
 - [Package Overview](#package-overview)
+- [Hands-On Notebook Guide](#hands-on-notebook-guide)
 - [What's New in 0.5.0](#whats-new-in-050)
 - [Key Features](#key-features)
 - [Architecture Diagram](#architecture-diagram)
@@ -63,6 +64,16 @@
 Maintained by **[Uditya Narayan Tiwari](https://udityanarayantiwari.netlify.app/)**.
 
 It provides over **60 single-purpose functions** and an extensible **Pipeline Engine** with defensive guards so `None`, `NaN` and missing values are treated as empty text, which makes it convenient to run over Pandas DataFrame columns and raw text datasets.
+
+---
+
+## Hands-On Notebook Guide
+
+A complete, cell-by-cell walkthrough with every output saved, so you can see what each function does before you install anything:
+
+**[NLP_Text_Preprocessing_Complete_Guide.ipynb](examples/NLP_Text_Preprocessing_Complete_Guide.ipynb)** &nbsp; [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/udityamerit/Text-Processing-Package-For-Natural-Language-Processing/blob/main/examples/NLP_Text_Preprocessing_Complete_Guide.ipynb)
+
+It has 13 parts: install and setup, safe inputs, features and readability, cleaning, emojis and PII masking, linguistic functions, moderation and sentiment, the `Pipeline` (arguments, save/load, batching), pandas and scikit-learn, transformers helpers, the `nlp-prep` command line, word clouds, and a cheat sheet.
 
 ---
 
