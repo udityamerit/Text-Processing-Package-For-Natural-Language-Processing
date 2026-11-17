@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nlp-text-preprocessing"
+dynamic = ["version"]
+description = "Text cleaning, feature extraction and linguistic utilities for NLP and ML pipelines"
+readme = "Readme.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Uditya Narayan Tiwari", email = "tiwarimerit@gmail.com" }]
+keywords = ["nlp", "text-preprocessing", "text-cleaning", "spacy", "nltk", "textblob"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+]
+# Dependencies the package genuinely uses. (pyaudio, SpeechRecognition,
+# openpyxl, PrettyTable, scikit-learn and numpy were listed before but are
+# never imported by the code.)
+dependencies = [
+    "spacy",
+    "textblob",
+    "nltk",
+    "beautifulsoup4",
+    "lxml",
+    "pandas",
+    "wordcloud",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing"
+"Source Code" = "https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing"
+"Bug Tracker" = "https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing/issues"
+"Author Website" = "https://udityanarayantiwari.netlify.app/"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["nlp_text_preprocessing*"]
+
+[tool.setuptools.package-data]
+nlp_text_preprocessing = ["data/*.json"]
+
+[tool.setuptools.dynamic]
+version = { attr = "nlp_text_preprocessing.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

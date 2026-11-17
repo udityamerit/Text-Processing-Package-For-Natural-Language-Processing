@@ -1,0 +1,21 @@
+# Byte-code and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Build artefacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments / editors
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Secrets
+.pypirc
+.env

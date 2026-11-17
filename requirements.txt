@@ -1,14 +1,8 @@
 spacy
 textblob
-beautifulsoup4
 nltk
-openpyxl
-SpeechRecognition==3.10.4
-pyaudio==0.2.14
-PrettyTable
-scikit-learn
-wordcloud
+beautifulsoup4
 lxml
 pandas
-numpy
+wordcloud
 matplotlib

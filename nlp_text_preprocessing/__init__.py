@@ -1,8 +1,11 @@
 # entry level code and import text preprocess
 
+__version__ = "0.3.0"
+
 from .all_text_preprocess import *
 
 __all__ = [
+    '__version__',
     'download_nltk_packages',
     'word_count',
     'char_count',
