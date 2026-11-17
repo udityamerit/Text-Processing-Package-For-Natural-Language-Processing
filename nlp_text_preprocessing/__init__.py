@@ -1,6 +1,6 @@
 # entry level code and import text preprocess
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 from .all_text_preprocess import *
 
@@ -33,6 +33,7 @@ __all__ = [
     'capital_ratio',
     'unique_word_ratio',
     'readability_score',
+    'readability_scores',
     'text_stats',
     'text_stats_batch',
     'to_lower_case',

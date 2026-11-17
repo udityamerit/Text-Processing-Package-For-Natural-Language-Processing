@@ -1,41 +1,23 @@
 import unittest
-import math
 
 from nlp_text_preprocessing import (
     download_nltk_packages,
     count_emails,
     remove_emails,
     pluralize_words,
-    singularize_words,
     avg_word_len,
     char_count,
     word_count,
     remove_stop_words,
     stop_words_count,
-    convert_to_base,
-    lemmatize,
-    sentiment_analysis,
-    get_wordcloud,
-    clean_text,
-    extract_features,
     to_lower_case,
-    contraction_to_expansion,
     count_urls,
     remove_urls,
     count_rt,
-    remove_rt,
-    remove_html_tag,
-    remove_accented_chars,
-    remove_mentions,
-    remove_special_chars,
-    remove_repeated_chars,
     hashtags_count,
     mentions_count,
     numerics_count,
     upper_case_count,
-    correct_spelling,
-    get_noun_phrase,
-    n_grams,
     remove_emojis,
     extract_emojis,
     emoji_to_text,
@@ -54,13 +36,9 @@ from nlp_text_preprocessing import (
     detect_language,
     keyword_extraction,
     text_similarity,
-    get_synonyms,
-    get_antonyms,
-    chunk_noun_phrases,
     sentence_count,
     avg_sentence_len,
     punctuation_density,
-    capital_ratio,
     unique_word_ratio,
     readability_score,
     text_stats,
@@ -174,7 +152,7 @@ class TestNLPTextPreprocessing(unittest.TestCase):
         profane_text = "This is a damn test."
         self.assertTrue(detect_profanity(profane_text))
         self.assertIn("****", censor_profanity(profane_text))
-        
+
         toxic_text = "You are a stupid idiot loser."
         self.assertGreater(detect_toxicity(toxic_text), 0.0)
 

@@ -46,7 +46,7 @@ viz = ["wordcloud", "matplotlib"]
 sklearn = ["scikit-learn"]
 transformers = ["transformers"]
 all = ["pandas", "wordcloud", "matplotlib", "scikit-learn"]
-dev = ["pytest", "build", "twine", "pandas", "wordcloud", "matplotlib", "scikit-learn"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "build", "twine", "pandas", "wordcloud", "matplotlib", "scikit-learn"]
 
 [project.scripts]
 nlp-prep = "nlp_text_preprocessing.cli:main"
@@ -64,10 +64,33 @@ include-package-data = true
 include = ["nlp_text_preprocessing*"]
 
 [tool.setuptools.package-data]
-nlp_text_preprocessing = ["data/*.json"]
+nlp_text_preprocessing = ["data/*.json", "py.typed"]
 
 [tool.setuptools.dynamic]
 version = { attr = "nlp_text_preprocessing.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["nlp_text_preprocessing"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+extend-exclude = ["examples", "dist", "build"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501", "E701", "E702", "E731", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+"nlp_text_preprocessing/__init__.py" = ["F403", "F405"]
+
+[tool.mypy]
+ignore_missing_imports = true
+files = ["nlp_text_preprocessing"]

@@ -1,7 +1,10 @@
 """Command line interface: ``nlp-prep`` (or ``python -m nlp_text_preprocessing``)."""
+from __future__ import annotations
+
 import argparse
 import csv
 import sys
+from typing import Optional, Sequence
 
 
 def _build_parser():
@@ -127,10 +130,10 @@ def _run_resources(args):
     return 1 if missing and args.download else 0
 
 
-def main(argv=None):
+def main(argv: Optional[Sequence[str]] = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8")
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
         except (AttributeError, ValueError):
             pass
     args = _build_parser().parse_args(argv)

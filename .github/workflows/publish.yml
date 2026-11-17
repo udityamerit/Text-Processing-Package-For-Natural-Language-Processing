@@ -6,6 +6,9 @@ name: Publish to PyPI
 #   repo:  Text-Processing-Package-For-Natural-Language-Processing
 #   workflow: publish.yml
 #   environment: pypi
+# Then create a repository variable TRUSTED_PUBLISHING=true (Settings -> Secrets and
+# variables -> Actions -> Variables). Until it is set the publish job is skipped, so
+# releases uploaded by hand with twine do not show a failed run. See RELEASING.md.
 on:
   release:
     types: [published]
@@ -28,6 +31,7 @@ jobs:
 
   publish:
     needs: build
+    if: ${{ vars.TRUSTED_PUBLISHING == 'true' }}
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

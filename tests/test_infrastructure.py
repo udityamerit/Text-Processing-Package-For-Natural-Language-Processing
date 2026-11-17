@@ -27,7 +27,7 @@ def test_import_is_light_and_silent():
 
 
 def test_version_exposed():
-    assert tp.__version__ == "0.4.1"
+    assert tp.__version__ == "0.5.0"
 
 
 def test_nltk_zip_only_resource_is_detected(monkeypatch):

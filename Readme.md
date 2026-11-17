@@ -143,6 +143,8 @@ clean_series = pipe.run_series(df['text_column'])
 report = tp.diff_report(raw_texts, clean_batch)
 ```
 
+`run_batch` and `run_series` are faster than looping over `run`: the spaCy steps (`lemmatize`, `convert_to_base`, `singularize_words`, `pluralize_words`) process the whole list with spaCy's `nlp.pipe` (about 2x faster in our test; the result is identical). `run_series` keeps the Series index and name.
+
 ### Steps with arguments, saving and scikit-learn
 
 ```python
@@ -242,6 +244,7 @@ Below is the complete reference guide for all functions available in the library
 | `capital_ratio(x)` | `x: str` | `float` | Returns proportion of uppercase words relative to total words. |
 | `unique_word_ratio(x)` | `x: str` | `float` | Returns lexical diversity ratio (unique words / total words). |
 | `readability_score(x)` | `x: str` | `float` | Calculates Flesch Reading Ease score. |
+| `readability_scores(x)` | `x: str` | `dict` | Flesch Reading Ease, Flesch-Kincaid grade, Gunning Fog, Automated Readability Index and Coleman-Liau (English, approximate). |
 | `hashtags_count(x)` | `x: str` | `int` | Returns count of hashtag tokens (`#tag`). |
 | `mentions_count(x)` | `x: str` | `int` | Returns count of user handle mentions (`@user`). |
 | `numerics_count(x)` | `x: str` | `int` | Returns count of numeric tokens. |
@@ -274,7 +277,7 @@ Below is the complete reference guide for all functions available in the library
 | `emoji_to_text(x)` | `x: str` | `str` | Converts emojis to descriptive text (e.g. 😂 -> `face_with_tears_of_joy`). |
 | `remove_phone_numbers(x)` | `x: str` | `str` | Strips phone numbers (international formats; dates and decimals are ignored). |
 | `count_phone_numbers(x)` | `x: str` | `int` | Counts phone numbers present in text. |
-| `mask_pii(x, token='[REDACTED]')` | `x: str` | `str` | Redacts emails, card numbers, US SSNs and phone numbers. |
+| `mask_pii(x, token='[REDACTED]', names=False)` | `x: str` | `str` | Redacts emails, card numbers, US SSNs and phone numbers. `names=True` also redacts people's names with spaCy's entity recogniser (statistical, so review the result). |
 | `remove_extra_whitespace(x)`| `x: str` | `str` | Collapses consecutive spaces, tabs, and newlines to a single space. |
 | `expand_hashtags(x)` | `x: str` | `str` | Splits hashtags (`#MachineLearning2024` -> `Machine Learning 2024`). |
 | `normalize_unicode_punctuation(x)`| `x: str` | `str` | Replaces smart quotes, em-dashes, and ellipsis with ASCII equivalents. |

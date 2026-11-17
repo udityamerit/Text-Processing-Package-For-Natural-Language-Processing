@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0
+
+### Added
+- `readability_scores()`: Flesch Reading Ease, Flesch-Kincaid grade, Gunning Fog, Automated Readability Index and Coleman-Liau in one dictionary.
+- `mask_pii(..., names=True)`: also redacts people's names using spaCy's named-entity recogniser (opt-in; it needs the spaCy model).
+- Type hints on the public API and a `py.typed` marker, so type checkers and IDEs use the annotations.
+- Development tooling: `ruff` and `mypy` configuration, coverage reporting, Python 3.13 in the CI matrix and Dependabot for the GitHub Actions versions.
+- `RELEASING.md` with the release steps and how to set up PyPI Trusted Publishing.
+
+### Changed
+- `Pipeline.run_batch`, `Pipeline.transform` and `Pipeline.run_series` process the spaCy steps (`lemmatize`, `convert_to_base`, `singularize_words`, `pluralize_words`) with `nlp.pipe`, about twice as fast on a list of texts. Results are identical. `run_series` keeps the Series index and name.
+- The publish workflow only runs its upload job when the repository variable `TRUSTED_PUBLISHING` is `true` (see `RELEASING.md`).
+
 ## 0.4.1
 
 ### Added

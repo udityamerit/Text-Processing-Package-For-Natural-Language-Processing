@@ -9,6 +9,8 @@
 #   ``download_nltk_packages()`` once, or ``check_resources()`` to see what is
 #   missing.
 
+from __future__ import annotations
+
 import os
 import sys
 import json
@@ -16,6 +18,7 @@ import re
 import math
 import warnings
 import unicodedata
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Sequence, Tuple
 
 fpath = os.path.join(os.path.dirname(__file__), 'data', 'contractions.json')
 try:
@@ -90,7 +93,7 @@ def _nltk_has(resource):
     return False
 
 
-def check_resources(include_optional=False, verbose=False):
+def check_resources(include_optional: bool = False, verbose: bool = False) -> Dict[str, Any]:
     """
     Reports which models / corpora are missing (nothing is downloaded).
 
@@ -104,7 +107,7 @@ def check_resources(include_optional=False, verbose=False):
     except ImportError:
         spacy_ok = False
     names = list(_DEFAULT_NLTK_DOWNLOADS) + (['movie_reviews'] if include_optional else [])
-    report = {'spacy_model': spacy_ok, 'nltk': {n: _nltk_has(n) for n in names}}
+    report: Dict[str, Any] = {"spacy_model": spacy_ok, "nltk": {n: _nltk_has(n) for n in names}}
     if verbose:
         print(f"spaCy model '{DEFAULT_SPACY_MODEL}': {'OK' if spacy_ok else 'MISSING'}")
         for n, ok in report['nltk'].items():
@@ -114,7 +117,7 @@ def check_resources(include_optional=False, verbose=False):
     return report
 
 
-def download_nltk_packages(spacy_model=DEFAULT_SPACY_MODEL, include_sentiment_corpus=False):
+def download_nltk_packages(spacy_model: str = DEFAULT_SPACY_MODEL, include_sentiment_corpus: bool = False) -> None:
     """
     One-time setup: downloads the NLTK data this package needs and, unless
     ``spacy_model=None``, the spaCy model.
@@ -128,9 +131,9 @@ def download_nltk_packages(spacy_model=DEFAULT_SPACY_MODEL, include_sentiment_co
         if not _nltk_has(package):
             nltk.download(package)
     if spacy_model:
-        spacy = _import_spacy()
-        import spacy.util
-        if not spacy.util.is_package(spacy_model):
+        _import_spacy()
+        from spacy.util import is_package
+        if not is_package(spacy_model):
             from spacy.cli import download
             download(spacy_model)
 
@@ -144,10 +147,10 @@ def _require_nltk(resource):
 
 
 # spaCy models, cached per model name.
-_nlp_cache = {}
+_nlp_cache: Dict[str, Any] = {}
 
 
-def get_spacy_nlp(model_name=DEFAULT_SPACY_MODEL, auto_download=None):
+def get_spacy_nlp(model_name: str = DEFAULT_SPACY_MODEL, auto_download: Optional[bool] = None) -> Any:
     """
     Lazy-loads and caches a spaCy language model (one cache entry per name).
 
@@ -188,6 +191,29 @@ def _run_spacy(text, disable=(), model_name=DEFAULT_SPACY_MODEL):
     return nlp(text)
 
 
+def _spacy_docs(texts, disable=(), model_name=DEFAULT_SPACY_MODEL, batch_size=64):
+    """
+    Runs spaCy over many texts with ``nlp.pipe`` (much faster than one call per text).
+
+    Returns a list in the same order as ``texts``; an empty or missing text gives ``None``.
+    """
+    cleaned = [_clean_input(t) for t in texts]
+    positions = [i for i, t in enumerate(cleaned) if t]
+    docs = [None] * len(cleaned)
+    if not positions:
+        return docs
+    nlp = get_spacy_nlp(model_name)
+    longest = max(len(cleaned[i]) for i in positions)
+    if longest >= nlp.max_length:
+        nlp.max_length = longest + 1
+    present = [c for c in disable if c in nlp.pipe_names]
+    with nlp.select_pipes(disable=present):
+        stream = nlp.pipe((cleaned[i] for i in positions), batch_size=batch_size)
+        for i, doc in zip(positions, stream):
+            docs[i] = doc
+    return docs
+
+
 # Stop words (spaCy's English list), loaded on first use.
 # Negations are kept by remove_stop_words() by default because dropping them
 # flips meaning ("I do not like it" -> "like").
@@ -198,7 +224,7 @@ NEGATION_WORDS = frozenset({
 _stop_words_cache = None
 
 
-def get_stop_words():
+def get_stop_words() -> FrozenSet[str]:
     """Returns the English stop-word set (spaCy's list, loaded lazily)."""
     global _stop_words_cache
     if _stop_words_cache is None:
@@ -398,18 +424,18 @@ def _syllables(word):
 
 # General Feature Extraction
 
-def word_count(x):
+def word_count(x: Any) -> int:
     """Returns the total number of words in text x."""
     text = _clean_input(x)
     return len(text.split())
 
-def char_count(x):
+def char_count(x: Any) -> int:
     """Returns total characters excluding whitespace in text x."""
     text = _clean_input(x)
     pattern = r'\s'
     return len(re.sub(pattern, '', text))
 
-def avg_word_len(x):
+def avg_word_len(x: Any) -> float:
     """Returns average word length in text x, returning 0.0 for empty text."""
     wc = word_count(x)
     return char_count(x) / wc if wc > 0 else 0.0
@@ -418,26 +444,26 @@ def _is_stop_word(token, stop_words):
     core = token.lower().strip('.,;:!?"“”()[]{}*')
     return core in stop_words
 
-def stop_words_count(x):
+def stop_words_count(x: Any) -> int:
     """Returns the count of stopwords in text x (case-insensitive, ignores attached punctuation)."""
     text = _clean_input(x)
     stop_words = get_stop_words()
     return sum(1 for word in text.split() if _is_stop_word(word, stop_words))
 
-def hashtags_count(x):
+def hashtags_count(x: Any) -> int:
     """Returns count of hashtags (#tag) in text x."""
     return len(_HASHTAG_RE.findall(_clean_input(x)))
 
-def mentions_count(x):
+def mentions_count(x: Any) -> int:
     """Returns count of user mentions (@user) in text x (email addresses are not mentions)."""
     return len(_MENTION_RE.findall(_clean_input(x)))
 
-def numerics_count(x):
+def numerics_count(x: Any) -> int:
     """Returns count of standalone numeric tokens in text x."""
     text = _clean_input(x)
     return len(re.findall(r'\b\d+\b', text))
 
-def upper_case_count(x):
+def upper_case_count(x: Any) -> int:
     """Returns count of fully upper-case words (2+ characters, so "I" and "A" are ignored)."""
     text = _clean_input(x)
     return len([word for word in text.split() if len(word) > 1 and word.isupper()])
@@ -449,7 +475,7 @@ _NON_TERMINAL_ABBREVIATIONS = frozenset({
 _SENTENCE_END_RE = re.compile(r'(\S*?)([.!?]+)(?=\s|$)')
 
 
-def sentence_count(x):
+def sentence_count(x: Any) -> int:
     """
     Returns the number of sentences in text x.
 
@@ -475,12 +501,12 @@ def sentence_count(x):
         count += 1
     return count
 
-def avg_sentence_len(x):
+def avg_sentence_len(x: Any) -> float:
     """Returns average sentence length in words."""
     sc = sentence_count(x)
     return word_count(x) / sc if sc > 0 else 0.0
 
-def punctuation_density(x):
+def punctuation_density(x: Any) -> float:
     """Returns proportion of punctuation characters in text x."""
     text = _clean_input(x)
     if not text:
@@ -488,18 +514,18 @@ def punctuation_density(x):
     punct = len(re.findall(r'[^\w\s]', text))
     return punct / len(text)
 
-def capital_ratio(x):
+def capital_ratio(x: Any) -> float:
     """Returns proportion of upper-case words relative to total words."""
     wc = word_count(x)
     return upper_case_count(x) / wc if wc > 0 else 0.0
 
-def unique_word_ratio(x):
+def unique_word_ratio(x: Any) -> float:
     """Returns proportion of unique words relative to total words."""
     text = _clean_input(x)
     words = text.lower().split()
     return len(set(words)) / len(words) if words else 0.0
 
-def readability_score(x):
+def readability_score(x: Any) -> float:
     """Calculates the Flesch Reading Ease score (syllables estimated per word)."""
     text = _clean_input(x)
     words = text.split()
@@ -511,7 +537,40 @@ def readability_score(x):
     score = 206.835 - (1.015 * (wc / sc)) - (84.6 * (syllables / wc))
     return round(score, 2)
 
-def text_stats(x):
+def readability_scores(x: Any) -> Dict[str, float]:
+    """
+    Returns several English readability measures for text x.
+
+    * ``flesch_reading_ease``: higher is easier (60-70 is plain English).
+    * ``flesch_kincaid_grade``: US school grade needed to understand the text.
+    * ``gunning_fog``: years of education needed (words with 3+ syllables count as hard).
+    * ``automated_readability_index`` and ``coleman_liau``: grade levels based on letters per word.
+
+    Syllables are estimated, so scores are approximate, and very short texts are unreliable.
+    Empty text gives 0.0 for every measure.
+    """
+    text = _clean_input(x)
+    words = text.split()
+    wc = len(words)
+    sc = sentence_count(text)
+    if wc == 0 or sc == 0:
+        return {k: 0.0 for k in ('flesch_reading_ease', 'flesch_kincaid_grade', 'gunning_fog',
+                                 'automated_readability_index', 'coleman_liau')}
+    syllables = sum(_syllables(w) for w in words)
+    complex_words = sum(1 for w in words if _syllables(w) >= 3)
+    letters = sum(1 for ch in text if ch.isalpha())
+    words_per_sentence = wc / sc
+    syllables_per_word = syllables / wc
+    letters_per_word = letters / wc
+    return {
+        'flesch_reading_ease': round(206.835 - 1.015 * words_per_sentence - 84.6 * syllables_per_word, 2),
+        'flesch_kincaid_grade': round(0.39 * words_per_sentence + 11.8 * syllables_per_word - 15.59, 2),
+        'gunning_fog': round(0.4 * (words_per_sentence + 100 * complex_words / wc), 2),
+        'automated_readability_index': round(4.71 * letters_per_word + 0.5 * words_per_sentence - 21.43, 2),
+        'coleman_liau': round(0.0588 * (100 * letters_per_word) - 0.296 * (100 * sc / wc) - 15.8, 2),
+    }
+
+def text_stats(x: Any) -> Dict[str, Any]:
     """Returns a dictionary of all summary feature stats for text x."""
     return {
         'word_count': word_count(x),
@@ -530,7 +589,7 @@ def text_stats(x):
         'readability_score': readability_score(x)
     }
 
-def text_stats_batch(df, column):
+def text_stats_batch(df: Any, column: str) -> Any:
     """Calculates a DataFrame of feature statistics for a pandas DataFrame column."""
     try:
         import pandas as pd
@@ -540,12 +599,12 @@ def text_stats_batch(df, column):
 
 # Preprocessing and Cleaning
 
-def to_lower_case(x):
+def to_lower_case(x: Any) -> str:
     """Converts text x to lowercase."""
     text = _clean_input(x)
     return text.lower()
 
-def contraction_to_expansion(x):
+def contraction_to_expansion(x: Any) -> str:
     """
     Expands contractions / slang in text x using the contractions dictionary.
 
@@ -571,31 +630,31 @@ def contraction_to_expansion(x):
 
     return re.sub(r'\S+', _expand, text)
 
-def remove_emails(x):
+def remove_emails(x: Any) -> str:
     """Removes email addresses from text x."""
     return _EMAIL_RE.sub('', _clean_input(x))
 
-def count_emails(x):
+def count_emails(x: Any) -> int:
     """Returns count of email addresses in text x."""
     return len(_EMAIL_RE.findall(_clean_input(x)))
 
-def count_urls(x):
+def count_urls(x: Any) -> int:
     """Returns count of URLs (http://, https://, ftp://, www.) in text x."""
     return len(_URL_RE.findall(_clean_input(x)))
 
-def remove_urls(x):
+def remove_urls(x: Any) -> str:
     """Removes URLs from text x (trailing sentence punctuation is kept)."""
     return _URL_RE.sub('', _clean_input(x))
 
-def count_rt(x):
+def count_rt(x: Any) -> int:
     """Returns count of retweets (RT @user) in text x."""
     return len(_RT_RE.findall(_clean_input(x)))
 
-def remove_rt(x):
+def remove_rt(x: Any) -> str:
     """Removes retweet prefixes (RT @user:) from text x."""
     return _RT_RE.sub('', _clean_input(x))
 
-def remove_html_tag(x):
+def remove_html_tag(x: Any) -> str:
     """Strips HTML tags from text x using BeautifulSoup (script/style content is dropped)."""
     text = _clean_input(x)
     if not text:
@@ -615,7 +674,7 @@ def remove_html_tag(x):
             tag.insert_after(' ')
         return soup.get_text().strip()
 
-def remove_accented_chars(x):
+def remove_accented_chars(x: Any) -> str:
     """
     Removes accents (é -> e) while keeping non-Latin scripts intact.
 
@@ -627,11 +686,11 @@ def remove_accented_chars(x):
     stripped = ''.join(ch for ch in decomposed if not '̀' <= ch <= 'ͯ')
     return unicodedata.normalize('NFC', stripped)
 
-def remove_mentions(x):
+def remove_mentions(x: Any) -> str:
     """Removes user mentions (@user) from text x; email addresses are left alone."""
     return _MENTION_RE.sub('', _clean_input(x)).strip()
 
-def remove_special_chars(x):
+def remove_special_chars(x: Any) -> str:
     """
     Removes special/punctuation characters from text x.
 
@@ -642,7 +701,7 @@ def remove_special_chars(x):
     text = re.sub(r'(?<=\w)[-/](?=\w)', ' ', text)
     return re.sub(r'[^\w\s]', '', text)
 
-def remove_repeated_chars(x):
+def remove_repeated_chars(x: Any) -> str:
     """
     Shortens elongated words: 3+ repeats of a letter become 2 ("soooo" -> "soo").
 
@@ -651,7 +710,7 @@ def remove_repeated_chars(x):
     text = _clean_input(x)
     return re.sub(r'([^\W\d_])\1{2,}', r'\1\1', text)
 
-def remove_stop_words(x, keep_negations=True):
+def remove_stop_words(x: Any, keep_negations: bool = True) -> str:
     """
     Removes stop words from text x (case-insensitive, punctuation-aware).
 
@@ -669,18 +728,18 @@ def remove_stop_words(x, keep_negations=True):
         kept.append(word)
     return " ".join(kept)
 
-def remove_emojis(x):
+def remove_emojis(x: Any) -> str:
     """Removes emoji (incl. flags, skin tones and ZWJ sequences) from text x."""
     def _drop(chars, data):
         # (c), (r) and (tm) are in the emoji set but are ordinary text symbols.
         return chars if chars.replace('️', '') in ('©', '®', '™') else ''
     return _import_emoji().replace_emoji(_clean_input(x), replace=_drop)
 
-def extract_emojis(x):
+def extract_emojis(x: Any) -> List[str]:
     """Returns a list of emojis present in text x."""
     return [m['emoji'] for m in _import_emoji().emoji_list(_clean_input(x))]
 
-def emoji_to_text(x):
+def emoji_to_text(x: Any) -> str:
     """Converts emojis in text x to their names ("😂" -> "face_with_tears_of_joy")."""
     text = _import_emoji().demojize(_clean_input(x), delimiters=(' ', ' '))
     return remove_extra_whitespace(text)
@@ -688,28 +747,40 @@ def emoji_to_text(x):
 def _phone_sub(text, repl):
     return _PHONE_RE.sub(lambda m: repl if _is_phone(m.group(0)) else m.group(0), text)
 
-def remove_phone_numbers(x):
+def remove_phone_numbers(x: Any) -> str:
     """Removes phone numbers (international formats included) from text x."""
     return _phone_sub(_clean_input(x), '')
 
-def count_phone_numbers(x):
+def count_phone_numbers(x: Any) -> int:
     """Counts phone numbers in text x."""
     return sum(1 for m in _PHONE_RE.finditer(_clean_input(x)) if _is_phone(m.group(0)))
 
-def mask_pii(x, token='[REDACTED]'):
-    """Redacts emails, card numbers, SSNs and phone numbers, replacing each with ``token``."""
+def mask_pii(x: Any, token: str = '[REDACTED]', names: bool = False) -> str:
+    """
+    Redacts emails, card numbers, SSNs and phone numbers, replacing each with ``token``.
+
+    With ``names=True`` people's names are redacted too, using spaCy's named-entity
+    recogniser (needs the spaCy model). This is statistical: it can miss unusual names
+    and occasionally mask a word that is not a name, so review the output when privacy matters.
+    """
     text = _clean_input(x)
     text = _EMAIL_RE.sub(token, text)
     text = _CARD_RE.sub(lambda m: token if _is_card(m.group(0)) else m.group(0), text)
     text = _SSN_RE.sub(token, text)
-    return _phone_sub(text, token)
+    text = _phone_sub(text, token)
+    if names and text.strip():
+        doc = _run_spacy(text, disable=('parser', 'lemmatizer'))
+        for ent in reversed(doc.ents):
+            if ent.label_ == 'PERSON':
+                text = text[:ent.start_char] + token + text[ent.end_char:]
+    return text
 
-def remove_extra_whitespace(x):
+def remove_extra_whitespace(x: Any) -> str:
     """Collapses consecutive spaces, tabs, and newlines into a single space."""
     text = _clean_input(x)
     return re.sub(r'\s+', ' ', text).strip()
 
-def expand_hashtags(x):
+def expand_hashtags(x: Any) -> str:
     """Splits hashtags into words (#MachineLearning2024 -> Machine Learning 2024, #NLPIsFun -> NLP Is Fun)."""
     text = _clean_input(x)
     def _split_tag(match):
@@ -721,7 +792,7 @@ def expand_hashtags(x):
         return tag
     return re.sub(r'(?<![\w#])#(\w+)', _split_tag, text)
 
-def normalize_unicode_punctuation(x):
+def normalize_unicode_punctuation(x: Any) -> str:
     """Replaces smart quotes, dashes, ellipsis and non-breaking/zero-width spaces with ASCII equivalents."""
     text = _clean_input(x)
     text = text.replace('“', '"').replace('”', '"').replace('„', '"')
@@ -730,7 +801,7 @@ def normalize_unicode_punctuation(x):
     text = text.replace(' ', ' ').replace(' ', ' ').replace(' ', ' ')
     return re.sub('[​‌‍⁠﻿]', '', text)
 
-def remove_numbers(x):
+def remove_numbers(x: Any) -> str:
     """
     Removes standalone numbers ("2026", "3.14", "1,000") from text x.
 
@@ -738,12 +809,12 @@ def remove_numbers(x):
     """
     return _NUMBER_RE.sub('', _clean_input(x))
 
-def remove_currency_symbols(x):
+def remove_currency_symbols(x: Any) -> str:
     """Strips currency symbols ($, €, ₹, £, ¥, ₿, ...) from text x."""
     text = _clean_input(x)
     return ''.join(ch for ch in text if unicodedata.category(ch) != 'Sc')
 
-def normalize_whitespace_and_casing(x):
+def normalize_whitespace_and_casing(x: Any) -> str:
     """Canonical combination of lowercasing and extra whitespace removal."""
     text = _clean_input(x)
     return remove_extra_whitespace(to_lower_case(text))
@@ -772,7 +843,7 @@ def _join_tokens(doc, attr='lemma_', only_pos=None):
     return ''.join(parts)
 
 
-def convert_to_base(x):
+def convert_to_base(x: Any) -> str:
     """Lemmatizes only nouns and verbs in text x using spaCy; other words are left as-is."""
     text = _clean_input(x)
     if not text:
@@ -780,7 +851,7 @@ def convert_to_base(x):
     doc = _run_spacy(text, disable=('parser', 'ner'))
     return _join_tokens(doc, only_pos=('NOUN', 'VERB'))
 
-def lemmatize(x):
+def lemmatize(x: Any) -> str:
     """Lemmatizes all tokens in text x using spaCy (original spacing is preserved)."""
     text = _clean_input(x)
     if not text:
@@ -788,7 +859,7 @@ def lemmatize(x):
     doc = _run_spacy(text, disable=('parser', 'ner'))
     return _join_tokens(doc)
 
-def extract_entities(x):
+def extract_entities(x: Any) -> List[Tuple[str, str]]:
     """Extracts named entities (text, label) from text x using spaCy."""
     text = _clean_input(x)
     if not text:
@@ -796,7 +867,7 @@ def extract_entities(x):
     doc = _run_spacy(text, disable=('parser', 'lemmatizer'))
     return [(ent.text, ent.label_) for ent in doc.ents]
 
-def extract_pos_tags(x):
+def extract_pos_tags(x: Any) -> List[Tuple[str, str, str]]:
     """Extracts POS tag breakdown (text, pos, tag) from text x using spaCy."""
     text = _clean_input(x)
     if not text:
@@ -804,7 +875,7 @@ def extract_pos_tags(x):
     doc = _run_spacy(text, disable=('parser', 'ner', 'lemmatizer'))
     return [(token.text, token.pos_, token.tag_) for token in doc]
 
-def get_dependency_tree(x):
+def get_dependency_tree(x: Any) -> List[Tuple[str, str, str]]:
     """Extracts dependency parse tree (token, dep, head) from text x using spaCy."""
     text = _clean_input(x)
     if not text:
@@ -812,7 +883,7 @@ def get_dependency_tree(x):
     doc = _run_spacy(text, disable=('ner', 'lemmatizer'))
     return [(token.text, token.dep_, token.head.text) for token in doc]
 
-def detect_language(x):
+def detect_language(x: Any) -> str:
     """
     Detects the language of text x and returns its ISO 639-1 code ("en", "fr", "hi", ...).
 
@@ -833,25 +904,25 @@ def detect_language(x):
     except LangDetectException:
         return "unknown"
 
-def keyword_extraction(x, top_n=5):
+def keyword_extraction(x: Any, top_n: int = 5) -> List[str]:
     """Extracts the top_n most frequent non-stop-word tokens (any alphabet, 3+ letters)."""
     text = _clean_input(x)
     stop_words = get_stop_words()
-    counts = {}
+    counts: Dict[str, int] = {}
     for w in re.findall(r'[^\W\d_]{3,}', text.lower()):
         if w not in stop_words:
             counts[w] = counts.get(w, 0) + 1
     ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)   # stable: ties keep first-seen order
     return [w for w, _ in ranked[:top_n]]
 
-def text_similarity(x1, x2):
+def text_similarity(x1: Any, x2: Any) -> float:
     """Jaccard similarity of the word sets of x1 and x2 (case- and punctuation-insensitive)."""
     words1 = set(re.findall(r'\w+', _clean_input(x1).lower()))
     words2 = set(re.findall(r'\w+', _clean_input(x2).lower()))
     union = words1 | words2
     return round(len(words1 & words2) / len(union), 4) if union else 0.0
 
-def get_synonyms(word):
+def get_synonyms(word: Any) -> List[str]:
     """Returns a sorted list of WordNet synonyms for a word (the word itself excluded)."""
     _require_nltk('wordnet')   # raises a helpful LookupError if missing
     from nltk.corpus import wordnet
@@ -863,7 +934,7 @@ def get_synonyms(word):
     synonyms.discard(query)
     return sorted(synonyms)
 
-def get_antonyms(word):
+def get_antonyms(word: Any) -> List[str]:
     """Returns a sorted list of WordNet antonyms for a word."""
     _require_nltk('wordnet')   # raises a helpful LookupError if missing
     from nltk.corpus import wordnet
@@ -875,7 +946,7 @@ def get_antonyms(word):
                 antonyms.add(ant.name().replace('_', ' '))
     return sorted(antonyms)
 
-def chunk_noun_phrases(x):
+def chunk_noun_phrases(x: Any) -> List[Dict[str, Any]]:
     """Extracts noun phrases with exact character start/end offsets (spaCy noun chunks)."""
     text = _clean_input(x)
     if not text:
@@ -883,7 +954,7 @@ def chunk_noun_phrases(x):
     doc = _run_spacy(text, disable=('ner', 'lemmatizer'))
     return [{'phrase': c.text, 'start': c.start_char, 'end': c.end_char} for c in doc.noun_chunks]
 
-def get_wordcloud(x, save_path=None, show=True):
+def get_wordcloud(x: Any, save_path: Optional[str] = None, show: bool = True) -> Any:
     """Generates and optionally displays or saves a WordCloud for text x."""
     text = _clean_input(x)
     if not text.strip():
@@ -908,7 +979,7 @@ def get_wordcloud(x, save_path=None, show=True):
         plt.close(fig)
     return cloud
 
-_spelling_cache = {}
+_spelling_cache: Dict[str, str] = {}
 
 
 def _correct_word(word):
@@ -918,7 +989,7 @@ def _correct_word(word):
     return _spelling_cache[word]
 
 
-def correct_spelling(x):
+def correct_spelling(x: Any) -> str:
     """
     Corrects the spelling of the words in text x using TextBlob.
 
@@ -940,7 +1011,7 @@ def correct_spelling(x):
     pattern = r"(?:https?://|www\.)\S+|\S+@\S+|[@#]\w+|(?<![\w'’])([^\W\d_]+)(?![\w'’])"
     return re.sub(pattern, _fix, text)
 
-def get_noun_phrase(x):
+def get_noun_phrase(x: Any) -> List[str]:
     """Extracts noun phrases from text x using TextBlob."""
     text = _clean_input(x)
     if not text:
@@ -948,7 +1019,7 @@ def get_noun_phrase(x):
     blob = _TextBlob(text)
     return list(blob.noun_phrases)
 
-def n_grams(x, n=2):
+def n_grams(x: Any, n: int = 2) -> List[Tuple[str, ...]]:
     """Returns the n-grams of text x as a list of word tuples (punctuation ignored)."""
     if not isinstance(n, int) or n < 1:
         raise ValueError("n must be a positive integer")
@@ -960,6 +1031,10 @@ def _inflect(text, source_tag, method):
     if not text:
         return ""
     doc = _run_spacy(text, disable=('parser', 'ner', 'lemmatizer'))
+    return _inflect_doc(doc, source_tag, method)
+
+
+def _inflect_doc(doc, source_tag, method):
     parts = []
     for token in doc:
         if token.tag_ == source_tag and token.is_alpha:
@@ -973,11 +1048,11 @@ def _inflect(text, source_tag, method):
             parts.append(token.text_with_ws)
     return ''.join(parts)
 
-def singularize_words(x):
+def singularize_words(x: Any) -> str:
     """Converts plural nouns (tag NNS) in text x to singular; spacing and punctuation are kept."""
     return _inflect(_clean_input(x), 'NNS', 'singularize')
 
-def pluralize_words(x):
+def pluralize_words(x: Any) -> str:
     """
     Converts singular common nouns (tag NN) in text x to plural; spacing and punctuation are kept.
 
@@ -986,6 +1061,33 @@ def pluralize_words(x):
     """
     return _inflect(_clean_input(x), 'NN', 'pluralize')
 
+
+# Whole-list versions of the spaCy string steps. Pipeline.run_batch uses them so that a
+# list of texts goes through spaCy in batches (nlp.pipe) instead of one call per text.
+def _batch_lemmatize(texts):
+    docs = _spacy_docs(texts, disable=('parser', 'ner'))
+    return ["" if d is None else _join_tokens(d) for d in docs]
+
+
+def _batch_convert_to_base(texts):
+    docs = _spacy_docs(texts, disable=('parser', 'ner'))
+    return ["" if d is None else _join_tokens(d, only_pos=('NOUN', 'VERB')) for d in docs]
+
+
+def _batch_inflector(tag, method):
+    def run(texts):
+        docs = _spacy_docs(texts, disable=('parser', 'ner', 'lemmatizer'))
+        return ["" if d is None else _inflect_doc(d, tag, method) for d in docs]
+    return run
+
+
+_BATCH_IMPL = {
+    lemmatize: _batch_lemmatize,
+    convert_to_base: _batch_convert_to_base,
+    singularize_words: _batch_inflector('NNS', 'singularize'),
+    pluralize_words: _batch_inflector('NN', 'pluralize'),
+}
+
 # Transformer-friendly cleaning
 
 _ZERO_WIDTH_RE = re.compile('[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00ad]')
@@ -993,8 +1095,10 @@ _CONTROL_RE = re.compile('[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]')
 _MARKUP_RE = re.compile(r'</?[A-Za-z][^>]*>|<!--|&(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z]+);')
 
 
-def light_clean(x, html=True, urls='', emails='', mentions=None, emojis=None,
-                normalize='NFKC', keep_newlines=False, lowercase=False):
+def light_clean(x: Any, html: bool = True, urls: Optional[str] = '', emails: Optional[str] = '',
+                mentions: Optional[str] = None, emojis: Optional[str] = None,
+                normalize: Optional[str] = 'NFKC', keep_newlines: bool = False,
+                lowercase: bool = False) -> str:
     """
     Minimal cleaning for BERT / GPT style models, which want natural text.
 
@@ -1019,7 +1123,7 @@ def light_clean(x, html=True, urls='', emails='', mentions=None, emojis=None,
     if not text:
         return ""
     if normalize:
-        text = unicodedata.normalize(normalize, text)
+        text = unicodedata.normalize(normalize, text)  # type: ignore[arg-type]
     text = _ZERO_WIDTH_RE.sub('', text)
     text = _CONTROL_RE.sub(' ', text)
     if html and _MARKUP_RE.search(text):
@@ -1060,7 +1164,7 @@ def _tokenize_for_limit(tokenizer, text):
     raise TypeError("tokenizer must be None, a callable, or an object with a .tokenize() method")
 
 
-def truncate_text(x, max_tokens, tokenizer=None):
+def truncate_text(x: Any, max_tokens: int, tokenizer: Optional[Any] = None) -> str:
     """
     Cuts text x to at most ``max_tokens`` tokens.
 
@@ -1078,7 +1182,7 @@ def truncate_text(x, max_tokens, tokenizer=None):
     return detokenize(tokens[:max_tokens])
 
 
-def chunk_text(x, max_tokens, overlap=0, tokenizer=None):
+def chunk_text(x: Any, max_tokens: int, overlap: int = 0, tokenizer: Optional[Any] = None) -> List[str]:
     """
     Splits long text into chunks of at most ``max_tokens`` tokens, each starting
     ``max_tokens - overlap`` tokens after the previous one (for long documents that
@@ -1161,7 +1265,7 @@ def _profane_spans(text, include_mild, extra_words, allow_words):
     return spans
 
 
-def detect_profanity(x, include_mild=True, extra_words=(), allow_words=()):
+def detect_profanity(x: Any, include_mild: bool = True, extra_words: Iterable[str] = (), allow_words: Iterable[str] = ()) -> bool:
     """
     Returns True if text x contains profanity.
 
@@ -1173,7 +1277,7 @@ def detect_profanity(x, include_mild=True, extra_words=(), allow_words=()):
     return bool(_profane_spans(_clean_input(x), include_mild, extra_words, allow_words))
 
 
-def censor_profanity(x, include_mild=True, extra_words=(), allow_words=(), mask_char='*'):
+def censor_profanity(x: Any, include_mild: bool = True, extra_words: Iterable[str] = (), allow_words: Iterable[str] = (), mask_char: str = '*') -> str:
     """Replaces each profane word with ``mask_char``; everything else is untouched."""
     text = _clean_input(x)
     for start, end in reversed(_profane_spans(text, include_mild, extra_words, allow_words)):
@@ -1181,7 +1285,7 @@ def censor_profanity(x, include_mild=True, extra_words=(), allow_words=(), mask_
     return text
 
 
-def toxicity_report(x):
+def toxicity_report(x: Any) -> Dict[str, Any]:
     """
     Explains the toxicity score: ``{'score': float, 'matches': [...], 'ignored': [...]}``.
 
@@ -1192,7 +1296,8 @@ def toxicity_report(x):
     """
     text = _clean_input(x)
     tokens = _MOD_TOKEN_RE.findall(text)
-    matches, ignored = [], []
+    matches: List[Any] = []
+    ignored: List[Any] = []
     for i, tok in enumerate(tokens):
         in_insults = _in_lexicon(tok, TOXICITY_INSULTS)
         targeted_only = _in_lexicon(tok, TOXICITY_THREATS) or _in_lexicon(tok, TOXICITY_DESCRIPTIVE)
@@ -1209,7 +1314,7 @@ def toxicity_report(x):
     return {'score': round(1 - 0.5 ** total, 4), 'matches': matches, 'ignored': ignored}
 
 
-def detect_toxicity(x):
+def detect_toxicity(x: Any) -> float:
     """
     Baseline toxicity score from 0.0 to 1.0 from a small lexicon (see :func:`toxicity_report`).
 
@@ -1220,7 +1325,7 @@ def detect_toxicity(x):
     return toxicity_report(x)['score']
 
 
-def detect_spam_signals(x):
+def detect_spam_signals(x: Any) -> Dict[str, Any]:
     """
     Detects spam signals: shouting (long all-caps text), runs of punctuation, links and
     typical spam phrases ("buy now", "click here").
@@ -1246,7 +1351,7 @@ def detect_spam_signals(x):
 
 # Sentiment & Classification
 
-def sentiment_analysis(x, method='pattern', threshold=0.05):
+def sentiment_analysis(x: Any, method: str = 'pattern', threshold: float = 0.05) -> str:
     """
     Classifies the sentiment of text x as ``'pos'``, ``'neg'`` or ``'neu'``.
 
@@ -1272,7 +1377,7 @@ def sentiment_analysis(x, method='pattern', threshold=0.05):
         return "neg"
     return "neu"
 
-def polarity_subjectivity(x):
+def polarity_subjectivity(x: Any) -> Dict[str, float]:
     """Returns pattern-based sentiment polarity (-1.0 to 1.0) and subjectivity (0.0 to 1.0)."""
     text = _clean_input(x)
     if not text.strip():
@@ -1280,7 +1385,7 @@ def polarity_subjectivity(x):
     blob = _TextBlob(text)
     return {'polarity': blob.sentiment.polarity, 'subjectivity': blob.sentiment.subjectivity}
 
-def emotion_detection(x):
+def emotion_detection(x: Any) -> Dict[str, Any]:
     """
     Calculates lexicon-based emotion counts (joy, anger, sadness, fear).
 
@@ -1300,9 +1405,9 @@ def emotion_detection(x):
 
 # Pipeline Automation Engine
 
-_REGISTERED_STEPS = {}
+_REGISTERED_STEPS: Dict[str, Callable[..., Any]] = {}
 
-def register_step(name):
+def register_step(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to register a custom function as a pipeline step.
     """
@@ -1366,7 +1471,7 @@ class Pipeline:
     importing scikit-learn. For use inside ``sklearn.pipeline.Pipeline`` see
     :class:`nlp_text_preprocessing.TextPreprocessor`.
     """
-    def __init__(self, steps=None):
+    def __init__(self, steps: Optional[Sequence[Any]] = None) -> None:
         self.steps = steps               # stored as given, so sklearn's clone() works
         self._compiled()                 # fail early on a typo, not in the middle of a run
 
@@ -1385,7 +1490,7 @@ class Pipeline:
     def __len__(self):
         return len(self._step_list())
 
-    def add_step(self, step):
+    def add_step(self, step: Any) -> 'Pipeline':
         _normalize_step(step)
         self.steps = self._step_list() + [step]
         return self
@@ -1400,32 +1505,51 @@ class Pipeline:
                                 f"the last step may return a non-string.")
         return res
 
-    def run(self, text):
+    def run(self, text: Any) -> Any:
         return self._apply(self._compiled(), text)
 
-    def run_batch(self, texts):
-        compiled = self._compiled()      # validate once, reuse for every text
-        return [self._apply(compiled, t) for t in texts]
+    def run_batch(self, texts: Iterable[Any]) -> List[Any]:
+        """
+        Runs the pipeline over many texts and returns a list.
 
-    def run_series(self, series):
-        compiled = self._compiled()
-        return series.apply(lambda t: self._apply(compiled, t))
+        Steps are applied to the whole list one after another, so spaCy steps
+        (``lemmatize``, ``convert_to_base``, ``singularize_words``, ``pluralize_words``)
+        use ``nlp.pipe`` and are several times faster than calling them per text.
+        """
+        compiled = self._compiled()      # validate once, reuse for every text
+        items = list(texts)
+        last = len(compiled) - 1
+        for i, (func, kwargs, label) in enumerate(compiled):
+            batch_func = _BATCH_IMPL.get(func)
+            if batch_func is not None and not kwargs:
+                items = batch_func(items)
+            else:
+                items = [func(t, **kwargs) for t in items]
+            if i < last and any(not isinstance(r, str) for r in items):
+                bad = next(r for r in items if not isinstance(r, str))
+                raise TypeError(f"Pipeline step '{label}' returned {type(bad).__name__}, but only "
+                                f"the last step may return a non-string.")
+        return items
+
+    def run_series(self, series: Any) -> Any:
+        """Runs the pipeline over a pandas Series; the index and name are kept."""
+        return series.__class__(self.run_batch(series.tolist()), index=series.index, name=series.name)
 
     # scikit-learn style API
-    def fit(self, X=None, y=None):
+    def fit(self, X: Any = None, y: Any = None) -> 'Pipeline':
         self._compiled()
         return self
 
-    def transform(self, X):
+    def transform(self, X: Iterable[Any]) -> List[Any]:
         return self.run_batch(X)
 
-    def fit_transform(self, X, y=None):
+    def fit_transform(self, X: Iterable[Any], y: Any = None) -> List[Any]:
         return self.fit(X, y).transform(X)
 
-    def get_params(self, deep=True):
+    def get_params(self, deep: bool = True) -> Dict[str, Any]:
         return {'steps': self.steps}
 
-    def set_params(self, **params):
+    def set_params(self, **params: Any) -> 'Pipeline':
         for key, value in params.items():
             if key != 'steps':
                 raise ValueError(f"Invalid parameter '{key}' for Pipeline.")
@@ -1434,7 +1558,7 @@ class Pipeline:
         return self
 
     # saving and loading
-    def to_config(self):
+    def to_config(self) -> List[Any]:
         """Return a JSON-serializable list describing the steps."""
         config = []
         for func, kwargs, label in self._compiled():
@@ -1447,8 +1571,8 @@ class Pipeline:
         return config
 
     @classmethod
-    def from_config(cls, config):
-        steps = []
+    def from_config(cls, config: Sequence[Any]) -> 'Pipeline':
+        steps: List[Any] = []
         for item in config:
             if isinstance(item, str):
                 steps.append(item)
@@ -1458,24 +1582,24 @@ class Pipeline:
                 raise ValueError(f"Invalid pipeline config entry: {item!r}")
         return cls(steps)
 
-    def save(self, path):
+    def save(self, path: Any) -> None:
         import json
         with open(path, 'w', encoding='utf-8') as fh:
             json.dump({'version': 1, 'steps': self.to_config()}, fh, indent=2)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path: Any) -> 'Pipeline':
         import json
         with open(path, encoding='utf-8') as fh:
             data = json.load(fh)
         return cls.from_config(data['steps'])
 
     @classmethod
-    def default(cls):
+    def default(cls) -> 'Pipeline':
         return cls(['remove_html_tag', 'remove_urls', 'remove_emails', 'to_lower_case',
                     'contraction_to_expansion', 'remove_special_chars', 'remove_extra_whitespace'])
 
-def diff_report(before_list, after_list):
+def diff_report(before_list: Iterable[Any], after_list: Iterable[Any]) -> Dict[str, Any]:
     """
     Generates a summary diff report comparing text before and after pipeline runs.
     """

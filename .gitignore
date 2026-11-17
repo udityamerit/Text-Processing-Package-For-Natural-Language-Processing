@@ -19,3 +19,4 @@ venv/
 # Secrets
 .pypirc
 .env
+.coverage
