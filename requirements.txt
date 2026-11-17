@@ -3,3 +3,5 @@ textblob
 nltk
 beautifulsoup4
 lxml
+emoji>=2.0
+langdetect

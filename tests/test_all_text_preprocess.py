@@ -142,7 +142,7 @@ class TestNLPTextPreprocessing(unittest.TestCase):
         self.assertEqual(remove_extra_whitespace("   Hello   world!  \n "), "Hello world!")
         self.assertEqual(expand_hashtags("I love #MachineLearning"), "I love Machine Learning")
         self.assertEqual(normalize_unicode_punctuation("“Hello”—world…"), '"Hello"-world...')
-        self.assertEqual(remove_numbers("Version 2.0 released in 2026"), "Version . released in ")
+        self.assertEqual(remove_numbers("Version 2.0 released in 2026"), "Version  released in ")
         self.assertEqual(remove_currency_symbols("Cost: $50 and €40"), "Cost: 50 and 40")
         self.assertEqual(normalize_whitespace_and_casing("  HELLO   WORLD "), "hello world")
 

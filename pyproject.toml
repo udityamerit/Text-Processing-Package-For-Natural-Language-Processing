@@ -36,6 +36,8 @@ dependencies = [
     "nltk",
     "beautifulsoup4",
     "lxml",
+    "emoji>=2.0",
+    "langdetect",
 ]
 
 [project.optional-dependencies]

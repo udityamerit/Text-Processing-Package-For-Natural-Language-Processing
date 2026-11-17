@@ -248,7 +248,10 @@ def _clean_input(x):
     return str(x)
 
 # EMOJI REGEX PATTERN & MAPPING
-EMOJI_PATTERN = r'[\U00010000-\U0010ffff\u2600-\u27ff\u2300-\u23ff\u2B00-\u2BFF\u2190-\u21FF]'
+# Kept for backwards compatibility only: the emoji functions below use the
+# `emoji` package, which knows the real Unicode emoji set (flags, skin tones,
+# ZWJ sequences, keycaps) instead of this coarse code-point range.
+EMOJI_PATTERN = r'[\U00010000-\U0010ffff☀-⟿⌀-⏿⬀-⯿←-⇿]'
 EMOJI_NAME_MAP = {
     '😂': 'face_with_tears_of_joy',
     '❤️': 'red_heart',
@@ -280,6 +283,77 @@ EMOTION_LEXICON = {
 TOXICITY_WORDS = {'hate', 'stupid', 'idiot', 'fool', 'loser', 'kill', 'ugly', 'trash', 'dumb', 'scum', 'nasty', 'horrible'}
 
 
+# Compiled patterns shared by the cleaning / counting helpers
+_EMAIL_RE = re.compile(
+    r'(?<![\w.+%-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b')
+# A URL must start with a scheme or "www." (so "httpd" or "http" in prose is left alone)
+# and may not end in sentence punctuation.
+_URL_RE = re.compile(
+    r'(?:https?://|ftp://|www\.)[^\s<>"\']*[^\s<>"\'.,;:!?)\]}]', re.IGNORECASE)
+_RT_RE = re.compile(r'\bRT\s+@\w+:?')
+_MENTION_RE = re.compile(r'(?<![\w@])@\w+')
+_HASHTAG_RE = re.compile(r'(?<![\w#])#\w+')
+_PHONE_RE = re.compile(
+    r'(?<![\w.])\+?(?:\(\d{1,4}\)|\d{1,4})(?:[\s.-]?(?:\(\d{1,4}\)|\d{1,6})){1,6}(?![\w:])')
+_CARD_RE = re.compile(r'(?<![\w.])\d(?:[ -]?\d){12,18}(?![\w])')
+_SSN_RE = re.compile(r'(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)')
+_NUMBER_RE = re.compile(r'\b\d+(?:[.,]\d+)*\b')
+_ISO_DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
+_BLOCK_TAGS = ('p', 'div', 'br', 'li', 'ul', 'ol', 'tr', 'table', 'h1', 'h2', 'h3',
+               'h4', 'h5', 'h6', 'blockquote', 'pre', 'section', 'article', 'hr')
+
+
+def _is_phone(candidate):
+    digits = re.sub(r'\D', '', candidate)
+    if not 10 <= len(digits) <= 15:
+        return False
+    if _ISO_DATE_RE.search(candidate):
+        return False
+    if re.fullmatch(r'\d+\.\d+', candidate.strip()):   # a decimal number, not a phone
+        return False
+    return True
+
+
+def _luhn_ok(digits):
+    total, flip = 0, False
+    for ch in reversed(digits):
+        d = int(ch)
+        if flip:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+        flip = not flip
+    return total % 10 == 0
+
+
+def _is_card(candidate):
+    digits = re.sub(r'\D', '', candidate)
+    if not 13 <= len(digits) <= 19:
+        return False
+    if re.fullmatch(r'\d{4}([ -]?)\d{4}\1\d{4}\1\d{4}', candidate):
+        return True            # classic 4-4-4-4 layout
+    return _luhn_ok(digits)
+
+
+def _import_emoji():
+    try:
+        import emoji
+        return emoji
+    except ImportError as e:
+        raise _missing_dependency('emoji', purpose='emoji handling') from e
+
+
+def _syllables(word):
+    w = re.sub(r'[^a-z]', '', word.lower())
+    if not w:
+        return 1
+    groups = len(re.findall(r'[aeiouy]+', w))
+    if w.endswith('e') and not w.endswith('le') and groups > 1:
+        groups -= 1                                      # silent final "e"
+    return max(1, groups)
+
+
 # General Feature Extraction
 
 def word_count(x):
@@ -298,20 +372,23 @@ def avg_word_len(x):
     wc = word_count(x)
     return char_count(x) / wc if wc > 0 else 0.0
 
+def _is_stop_word(token, stop_words):
+    core = token.lower().strip('.,;:!?"“”()[]{}*')
+    return core in stop_words
+
 def stop_words_count(x):
-    """Returns the count of stopwords in text x."""
+    """Returns the count of stopwords in text x (case-insensitive, ignores attached punctuation)."""
     text = _clean_input(x)
-    return len([word for word in text.lower().split() if word in get_stop_words()])
+    stop_words = get_stop_words()
+    return sum(1 for word in text.split() if _is_stop_word(word, stop_words))
 
 def hashtags_count(x):
     """Returns count of hashtags (#tag) in text x."""
-    text = _clean_input(x)
-    return len(re.findall(r'#\w+', text))
+    return len(_HASHTAG_RE.findall(_clean_input(x)))
 
 def mentions_count(x):
-    """Returns count of user mentions (@user) in text x."""
-    text = _clean_input(x)
-    return len(re.findall(r'@\w+', text))
+    """Returns count of user mentions (@user) in text x (email addresses are not mentions)."""
+    return len(_MENTION_RE.findall(_clean_input(x)))
 
 def numerics_count(x):
     """Returns count of standalone numeric tokens in text x."""
@@ -319,16 +396,16 @@ def numerics_count(x):
     return len(re.findall(r'\b\d+\b', text))
 
 def upper_case_count(x):
-    """Returns count of uppercase words in text x."""
+    """Returns count of fully upper-case words (2+ characters, so "I" and "A" are ignored)."""
     text = _clean_input(x)
-    return len([word for word in text.split() if word.isupper()])
+    return len([word for word in text.split() if len(word) > 1 and word.isupper()])
 
 def sentence_count(x):
-    """Returns the number of sentences in text x."""
+    """Returns the number of sentences in text x (a '.' inside 3.14 or e.g.com does not split)."""
     text = _clean_input(x)
-    if not text:
+    if not text.strip():
         return 0
-    sentences = re.split(r'[.!?]+', text)
+    sentences = re.split(r'[.!?]+(?=\s|$)', text)
     return len([s for s in sentences if s.strip()])
 
 def avg_sentence_len(x):
@@ -345,7 +422,7 @@ def punctuation_density(x):
     return punct / len(text)
 
 def capital_ratio(x):
-    """Returns proportion of uppercase words relative to total words."""
+    """Returns proportion of upper-case words relative to total words."""
     wc = word_count(x)
     return upper_case_count(x) / wc if wc > 0 else 0.0
 
@@ -356,14 +433,14 @@ def unique_word_ratio(x):
     return len(set(words)) / len(words) if words else 0.0
 
 def readability_score(x):
-    """Calculates Flesch Reading Ease score for text x."""
+    """Calculates the Flesch Reading Ease score (syllables estimated per word)."""
     text = _clean_input(x)
-    wc = word_count(x)
-    sc = sentence_count(x)
+    words = text.split()
+    wc = len(words)
+    sc = sentence_count(text)
     if wc == 0 or sc == 0:
         return 0.0
-    vowels = len(re.findall(r'[aeiouAEIOU]', text))
-    syllables = max(vowels, wc)
+    syllables = sum(_syllables(w) for w in words)
     score = 206.835 - (1.015 * (wc / sc)) - (84.6 * (syllables / wc))
     return round(score, 2)
 
@@ -388,7 +465,10 @@ def text_stats(x):
 
 def text_stats_batch(df, column):
     """Calculates a DataFrame of feature statistics for a pandas DataFrame column."""
-    import pandas as pd
+    try:
+        import pandas as pd
+    except ImportError as e:
+        raise _missing_dependency('pandas', extra='pandas', purpose='text_stats_batch') from e
     return df[column].apply(text_stats).apply(pd.Series)
 
 # Preprocessing and Cleaning
@@ -399,48 +479,57 @@ def to_lower_case(x):
     return text.lower()
 
 def contraction_to_expansion(x):
-    """Expands contractions in text x using contractions dictionary."""
+    """
+    Expands contractions / slang in text x using the contractions dictionary.
+
+    Whitespace and surrounding punctuation are preserved ("can't." -> "cannot."),
+    curly apostrophes are understood, and a leading capital is kept.
+    """
     text = _clean_input(x)
-    return " ".join([contractions.get(word.lower(), word) for word in text.split()])
+
+    def _expand(match):
+        token = match.group(0)
+        lead = re.match(r'^[^\w]*', token).group(0)
+        trail = re.search(r'[^\w]*$', token).group(0)
+        core = token[len(lead):len(token) - len(trail)] if trail else token[len(lead):]
+        if not core:
+            return token
+        key = core.replace('’', "'").replace('‘', "'").lower()
+        expansion = contractions.get(key)
+        if expansion is None:
+            return token
+        if core[0].isupper() and not core.isupper():
+            expansion = expansion[:1].upper() + expansion[1:]
+        return lead + expansion + trail
+
+    return re.sub(r'\S+', _expand, text)
 
 def remove_emails(x):
     """Removes email addresses from text x."""
-    text = _clean_input(x)
-    pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z.-]+\.[A-Z|a-z]{2,}\b'
-    return re.sub(pattern, '', text)
+    return _EMAIL_RE.sub('', _clean_input(x))
 
 def count_emails(x):
     """Returns count of email addresses in text x."""
-    text = _clean_input(x)
-    pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z.-]+\.[A-Z|a-z]{2,}\b'
-    return len(re.findall(pattern, text))
+    return len(_EMAIL_RE.findall(_clean_input(x)))
 
 def count_urls(x):
-    """Returns count of URLs in text x."""
-    text = _clean_input(x)
-    pattern = r'http\S+|www\.\S+'
-    return len(re.findall(pattern, text))
+    """Returns count of URLs (http://, https://, ftp://, www.) in text x."""
+    return len(_URL_RE.findall(_clean_input(x)))
 
 def remove_urls(x):
-    """Removes URLs from text x."""
-    text = _clean_input(x)
-    pattern = r'http\S+|www\.\S+'
-    return re.sub(pattern, '', text)
+    """Removes URLs from text x (trailing sentence punctuation is kept)."""
+    return _URL_RE.sub('', _clean_input(x))
 
 def count_rt(x):
     """Returns count of retweets (RT @user) in text x."""
-    text = _clean_input(x)
-    pattern = r'\bRT @\w+'
-    return len(re.findall(pattern, text))
+    return len(_RT_RE.findall(_clean_input(x)))
 
 def remove_rt(x):
-    """Removes retweet prefixes (RT @user) from text x."""
-    text = _clean_input(x)
-    pattern = r'\bRT @\w+'
-    return re.sub(pattern, '', text)
+    """Removes retweet prefixes (RT @user:) from text x."""
+    return _RT_RE.sub('', _clean_input(x))
 
 def remove_html_tag(x):
-    """Strips HTML tags from text x using BeautifulSoup."""
+    """Strips HTML tags from text x using BeautifulSoup (script/style content is dropped)."""
     text = _clean_input(x)
     if not text:
         return ""
@@ -448,72 +537,105 @@ def remove_html_tag(x):
         from bs4 import BeautifulSoup
     except ImportError as e:
         raise _missing_dependency('beautifulsoup4', purpose='remove_html_tag') from e
-    return BeautifulSoup(text, 'lxml').get_text()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')   # bs4 warns when text merely looks like a URL/filename
+        soup = BeautifulSoup(text, 'lxml')
+        for tag in soup(['script', 'style']):
+            tag.decompose()
+        # Block-level tags separate words ("<p>a</p><p>b</p>" -> "a b", not "ab").
+        for tag in soup.find_all(_BLOCK_TAGS):
+            tag.insert_before(' ')
+            tag.insert_after(' ')
+        return soup.get_text().strip()
 
 def remove_accented_chars(x):
-    """Removes accented characters from text x."""
+    """
+    Removes accents (é -> e) while keeping non-Latin scripts intact.
+
+    Only combining marks are dropped; Hindi, Chinese, Arabic, etc. are not erased.
+    """
     text = _clean_input(x)
-    return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8', 'ignore')
+    decomposed = unicodedata.normalize('NFKD', text)
+    # Only Latin-style diacritics (U+0300-U+036F); Indic vowel signs / viramas etc. must stay.
+    stripped = ''.join(ch for ch in decomposed if not '̀' <= ch <= 'ͯ')
+    return unicodedata.normalize('NFC', stripped)
 
 def remove_mentions(x):
-    """Removes user mentions (@user) from text x."""
-    text = _clean_input(x)
-    pattern = r'@\w+'
-    return re.sub(pattern, "", text).strip()
+    """Removes user mentions (@user) from text x; email addresses are left alone."""
+    return _MENTION_RE.sub('', _clean_input(x)).strip()
 
 def remove_special_chars(x):
-    """Removes special/punctuation characters from text x."""
+    """
+    Removes special/punctuation characters from text x.
+
+    Hyphens and slashes between words become spaces ("well-known" -> "well known")
+    instead of gluing the words together; apostrophes are dropped ("don't" -> "dont").
+    """
     text = _clean_input(x)
-    pattern = r'[^\w\s]'
-    return re.sub(pattern, '', text)
+    text = re.sub(r'(?<=\w)[-/](?=\w)', ' ', text)
+    return re.sub(r'[^\w\s]', '', text)
 
 def remove_repeated_chars(x):
-    """Truncates character repetitions beyond 2 consecutive occurrences in text x."""
-    text = _clean_input(x)
-    pattern = r'(.)\1+'
-    return re.sub(pattern, r'\1\1', text)
+    """
+    Shortens elongated words: 3+ repeats of a letter become 2 ("soooo" -> "soo").
 
-def remove_stop_words(x):
-    """Removes stop words from text x (case-insensitive check)."""
+    Digits, spaces and punctuation are untouched ("1000000" and "..." stay as they are).
+    """
     text = _clean_input(x)
-    return " ".join([word for word in text.split() if word.lower() not in get_stop_words()])
+    return re.sub(r'([^\W\d_])\1{2,}', r'\1\1', text)
+
+def remove_stop_words(x, keep_negations=True):
+    """
+    Removes stop words from text x (case-insensitive, punctuation-aware).
+
+    Negations ("not", "no", "never", ...) are kept by default because removing
+    them flips the meaning ("I do not like it" must not become "like").
+    Pass ``keep_negations=False`` to drop them too.
+    """
+    text = _clean_input(x)
+    stop_words = get_stop_words()
+    kept = []
+    for word in text.split():
+        core = word.lower().strip('.,;:!?"“”()[]{}*')
+        if core in stop_words and not (keep_negations and core in NEGATION_WORDS):
+            continue
+        kept.append(word)
+    return " ".join(kept)
 
 def remove_emojis(x):
-    """Removes emoji characters from text x."""
-    text = _clean_input(x)
-    return re.sub(EMOJI_PATTERN, '', text)
+    """Removes emoji (incl. flags, skin tones and ZWJ sequences) from text x."""
+    def _drop(chars, data):
+        # (c), (r) and (tm) are in the emoji set but are ordinary text symbols.
+        return chars if chars.replace('️', '') in ('©', '®', '™') else ''
+    return _import_emoji().replace_emoji(_clean_input(x), replace=_drop)
 
 def extract_emojis(x):
     """Returns a list of emojis present in text x."""
-    text = _clean_input(x)
-    return re.findall(EMOJI_PATTERN, text)
+    return [m['emoji'] for m in _import_emoji().emoji_list(_clean_input(x))]
 
 def emoji_to_text(x):
-    """Converts emojis in text x to descriptive text representations."""
-    text = _clean_input(x)
-    for char, name in EMOJI_NAME_MAP.items():
-        text = text.replace(char, f" {name} ")
+    """Converts emojis in text x to their names ("😂" -> "face_with_tears_of_joy")."""
+    text = _import_emoji().demojize(_clean_input(x), delimiters=(' ', ' '))
     return remove_extra_whitespace(text)
 
+def _phone_sub(text, repl):
+    return _PHONE_RE.sub(lambda m: repl if _is_phone(m.group(0)) else m.group(0), text)
+
 def remove_phone_numbers(x):
-    """Removes phone numbers from text x."""
-    text = _clean_input(x)
-    pattern = r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
-    return re.sub(pattern, '', text)
+    """Removes phone numbers (international formats included) from text x."""
+    return _phone_sub(_clean_input(x), '')
 
 def count_phone_numbers(x):
     """Counts phone numbers in text x."""
-    text = _clean_input(x)
-    pattern = r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
-    return len(re.findall(pattern, text))
+    return sum(1 for m in _PHONE_RE.finditer(_clean_input(x)) if _is_phone(m.group(0)))
 
-def mask_pii(x):
-    """Redacts emails, phone numbers, and card/ID numbers with [REDACTED]."""
+def mask_pii(x, token='[REDACTED]'):
+    """Redacts emails, card numbers, SSNs and phone numbers, replacing each with ``token``."""
     text = _clean_input(x)
-    text = remove_emails(text)
-    text = remove_phone_numbers(text)
-    text = re.sub(r'\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b', '[REDACTED]', text)
-    return text
+    text = _EMAIL_RE.sub(token, text)
+    text = _CARD_RE.sub(lambda m: token if _is_card(m.group(0)) else m.group(0), text)
+    text = _SSN_RE.sub(token, text)
+    return _phone_sub(text, token)
 
 def remove_extra_whitespace(x):
     """Collapses consecutive spaces, tabs, and newlines into a single space."""
@@ -521,30 +643,38 @@ def remove_extra_whitespace(x):
     return re.sub(r'\s+', ' ', text).strip()
 
 def expand_hashtags(x):
-    """Splits camelCase or PascalCase hashtags (#MachineLearning -> Machine Learning)."""
+    """Splits hashtags into words (#MachineLearning2024 -> Machine Learning 2024, #NLPIsFun -> NLP Is Fun)."""
     text = _clean_input(x)
     def _split_tag(match):
-        tag = match.group(1)
-        split = re.sub(r'([a-z])([A-Z])', r'\1 \2', tag)
-        return split
-    return re.sub(r'#(\w+)', _split_tag, text)
+        tag = match.group(1).replace('_', ' ')
+        tag = re.sub(r'([a-z])([A-Z])', r'\1 \2', tag)
+        tag = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', tag)
+        tag = re.sub(r'([A-Za-z])(\d)', r'\1 \2', tag)
+        tag = re.sub(r'(\d)([A-Za-z])', r'\1 \2', tag)
+        return tag
+    return re.sub(r'(?<![\w#])#(\w+)', _split_tag, text)
 
 def normalize_unicode_punctuation(x):
-    """Replaces smart quotes, em-dashes, and ellipsis with ASCII equivalents."""
+    """Replaces smart quotes, dashes, ellipsis and non-breaking/zero-width spaces with ASCII equivalents."""
     text = _clean_input(x)
-    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
-    text = text.replace('—', '-').replace('–', '-').replace('…', '...')
-    return text
+    text = text.replace('“', '"').replace('”', '"').replace('„', '"')
+    text = text.replace('‘', "'").replace('’', "'").replace('‚', "'")
+    text = text.replace('—', '-').replace('–', '-').replace('−', '-').replace('…', '...')
+    text = text.replace(' ', ' ').replace(' ', ' ').replace(' ', ' ')
+    return re.sub('[​‌‍⁠﻿]', '', text)
 
 def remove_numbers(x):
-    """Strips all numeric digits from text x."""
-    text = _clean_input(x)
-    return re.sub(r'\d+', '', text)
+    """
+    Removes standalone numbers ("2026", "3.14", "1,000") from text x.
+
+    Digits inside words are kept, so "3rd", "H2O" and "COVID19" survive.
+    """
+    return _NUMBER_RE.sub('', _clean_input(x))
 
 def remove_currency_symbols(x):
-    """Strips common currency symbols ($, €, ₹, £, ¥) from text x."""
+    """Strips currency symbols ($, €, ₹, £, ¥, ₿, ...) from text x."""
     text = _clean_input(x)
-    return re.sub(r'[$€₹£¥฿₱₩₫]', '', text)
+    return ''.join(ch for ch in text if unicodedata.category(ch) != 'Sc')
 
 def normalize_whitespace_and_casing(x):
     """Canonical combination of lowercasing and extra whitespace removal."""
