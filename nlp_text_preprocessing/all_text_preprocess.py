@@ -764,15 +764,17 @@ def mask_pii(x: Any, token: str = '[REDACTED]', names: bool = False) -> str:
     and occasionally mask a word that is not a name, so review the output when privacy matters.
     """
     text = _clean_input(x)
-    text = _EMAIL_RE.sub(token, text)
-    text = _CARD_RE.sub(lambda m: token if _is_card(m.group(0)) else m.group(0), text)
-    text = _SSN_RE.sub(token, text)
-    text = _phone_sub(text, token)
     if names and text.strip():
+        # Find names on the original text, before any placeholder is inserted:
+        # spaCy can mistake a placeholder such as "<PII>" for part of an entity.
         doc = _run_spacy(text, disable=('parser', 'lemmatizer'))
         for ent in reversed(doc.ents):
             if ent.label_ == 'PERSON':
                 text = text[:ent.start_char] + token + text[ent.end_char:]
+    text = _EMAIL_RE.sub(token, text)
+    text = _CARD_RE.sub(lambda m: token if _is_card(m.group(0)) else m.group(0), text)
+    text = _SSN_RE.sub(token, text)
+    text = _phone_sub(text, token)
     return text
 
 def remove_extra_whitespace(x: Any) -> str:

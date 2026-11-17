@@ -27,6 +27,7 @@
 ## Table of Contents
 
 - [Package Overview](#package-overview)
+- [What's New in 0.5.0](#whats-new-in-050)
 - [Key Features](#key-features)
 - [Architecture Diagram](#architecture-diagram)
 - [Quickstart and Setup](#quickstart-and-setup)
@@ -45,6 +46,11 @@
   - [Pandas DataFrame Integration](#3-pandas-dataframe-integration)
   - [Batch Feature Extraction](#4-batch-feature-extraction)
   - [WordCloud Generation](#5-wordcloud-generation)
+  - [Readability Scores](#6-readability-scores)
+  - [Masking Personal Data, Including Names](#7-masking-personal-data-including-names)
+  - [Fast Batch Processing](#8-fast-batch-processing)
+- [Type Hints](#type-hints)
+- [Development](#development)
 - [Troubleshooting and Resource Setup](#troubleshooting-and-resource-setup)
 - [License and Author](#license-and-author)
 
@@ -60,16 +66,30 @@ It provides over **60 single-purpose functions** and an extensible **Pipeline En
 
 ---
 
+## What's New in 0.5.0
+
+- **`readability_scores(x)`**: five readability measures in one dictionary (Flesch Reading Ease, Flesch-Kincaid grade, Gunning Fog, ARI, Coleman-Liau). See [Readability Scores](#6-readability-scores).
+- **`mask_pii(x, names=True)`**: also redacts people's names with spaCy's entity recogniser. Off by default. See [Masking Personal Data](#7-masking-personal-data-including-names).
+- **Faster batches**: `Pipeline.run_batch`, `transform` and `run_series` process the spaCy steps with `nlp.pipe` (about 2x faster, identical output).
+- **Type hints** on the public API and a `py.typed` marker, so mypy, Pyright and IDEs use them. See [Type Hints](#type-hints).
+- **Developer tooling**: ruff, mypy, coverage, Python 3.13 in CI and Dependabot. See [Development](#development).
+
+Everything from earlier versions still works the same way. The full history is in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## Key Features
 
 - **Safe Inputs**: `None`, `NaN`, `pd.NA` and bytes are handled by every function (treated as empty text).
 - **Pipeline Automation Engine**: Chain cleaning steps by name or custom functions via `Pipeline(['to_lower_case', 'remove_urls', 'lemmatize'])`.
 - **Light Import, Lazy Models**: `import nlp_text_preprocessing` loads no heavy library and downloads nothing. spaCy, TextBlob and NLTK data are loaded on first use and cached.
 - **Advanced Cleaning**: Remove emojis, phone numbers, PII mask, URLs, emails, HTML, retweets, special symbols, and expand contractions/hashtags.
-- **Feature & Readability Extraction**: Extract word counts, sentence counts, readability scores (Flesch Ease), punctuation density, capital ratios, and full batch statistics.
+- **Feature & Readability Extraction**: Extract word counts, sentence counts, readability scores (Flesch Ease, plus Flesch-Kincaid, Gunning Fog, ARI and Coleman-Liau via `readability_scores`), punctuation density, capital ratios, and full batch statistics.
 - **Linguistic Utilities**: Named Entity Recognition (NER), POS tagging, dependency parsing, language detection, keyword extraction, synonyms, antonyms, and n-grams.
 - **Safety & Moderation (baseline)**: Lexicon-based profanity, toxicity, spam and emotion helpers. They are transparent keyword baselines, not a moderation system: use a trained model for anything high-stakes.
 - **Visualization**: Generate and save custom WordClouds to disk or display interactively.
+- **Fast Batches**: `Pipeline.run_batch` / `run_series` use spaCy's `nlp.pipe` for the spaCy steps.
+- **Typed**: annotated public API with a `py.typed` marker.
 
 ---
 
@@ -92,7 +112,9 @@ pip install nlp-text-preprocessing            # core
 pip install "nlp-text-preprocessing[viz]"     # + wordcloud, matplotlib (get_wordcloud)
 pip install "nlp-text-preprocessing[pandas]"  # + pandas (text_stats_batch, Pipeline.run_series)
 pip install "nlp-text-preprocessing[sklearn]" # + scikit-learn (TextPreprocessor)
+pip install "nlp-text-preprocessing[transformers]" # + transformers (tokenizers for truncate_text / chunk_text)
 pip install "nlp-text-preprocessing[all]"     # everything optional
+pip install "nlp-text-preprocessing[dev]"     # tests, ruff, mypy (for contributors)
 ```
 
 ### 2. Downloading Required Corpora and Models
@@ -412,6 +434,82 @@ text = "python natural language processing machine learning text mining data sci
 # Save directly to disk without opening interactive GUI window
 tp.get_wordcloud(text, save_path="wordcloud.png", show=False)
 ```
+
+### 6. Readability Scores
+
+```python
+import nlp_text_preprocessing as tp
+
+scores = tp.readability_scores("The cat sat on the mat. It was a sunny day.")
+print(scores)
+# {'flesch_reading_ease': ..., 'flesch_kincaid_grade': ..., 'gunning_fog': ...,
+#  'automated_readability_index': ..., 'coleman_liau': ...}
+
+# Higher Flesch = easier. The other four are US school grade levels (higher = harder).
+# Empty or None text returns 0.0 for every key.
+```
+
+`tp.readability_score(x)` still returns only the Flesch Reading Ease number. The scores are approximate and meant for English.
+
+### 7. Masking Personal Data, Including Names
+
+```python
+import nlp_text_preprocessing as tp
+
+text = "Barack Obama emailed me at obama@example.com or 555-123-4567."
+
+tp.mask_pii(text)
+# 'Barack Obama emailed me at [REDACTED] or [REDACTED].'   (names are left alone by default)
+
+tp.mask_pii(text, names=True)
+# '[REDACTED] emailed me at [REDACTED] or [REDACTED].'   (needs the spaCy model; run tp.download_nltk_packages() once)
+
+tp.mask_pii(text, token='<PII>', names=True)   # custom replacement token
+```
+
+Names are found by spaCy's statistical entity recogniser, so it can miss or over-match some names. Review the output when privacy matters.
+
+### 8. Fast Batch Processing
+
+```python
+import nlp_text_preprocessing as tp
+
+pipe = tp.Pipeline(['to_lower_case', 'remove_urls', 'lemmatize'])
+
+texts = ["Dogs are barking at https://example.com", "Cats were running"] * 500
+clean = pipe.run_batch(texts)             # list in, list out
+clean_series = pipe.run_series(df['text'])  # keeps the Series index and name
+```
+
+---
+
+## Type Hints
+
+The package ships a `py.typed` marker and annotated function signatures, so type checkers and IDEs show parameter and return types:
+
+```python
+import nlp_text_preprocessing as tp
+
+n: int = tp.word_count("hello world")
+scores: dict = tp.readability_scores("Hello there.")
+```
+
+---
+
+## Development
+
+```bash
+git clone https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing.git
+cd Text-Processing-Package-For-Natural-Language-Processing
+pip install -e ".[dev,all]"
+python -m spacy download en_core_web_sm
+
+pytest -q --cov          # tests with coverage
+ruff check .             # lint
+mypy                     # type check
+```
+
+CI runs the same checks on Python 3.10 to 3.13. Release steps, and how to set up PyPI Trusted Publishing, are in [RELEASING.md](RELEASING.md).
 
 ---
 

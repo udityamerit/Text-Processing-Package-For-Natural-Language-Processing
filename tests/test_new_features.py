@@ -46,6 +46,15 @@ def test_mask_pii_names_requires_opt_in_and_masks_person():
     assert "yesterday" in out
 
 
+def test_mask_pii_names_angle_bracket_token_not_doubled():
+    pytest.importorskip("spacy")
+    if not tp.check_resources()["spacy_model"]:
+        pytest.skip("spaCy model not installed")
+    out = tp.mask_pii("mail a@b.com or 555-123-4567.", token="<PII>", names=True)
+    assert out == "mail <PII> or <PII>."
+    assert "<<" not in tp.mask_pii("Barack Obama, a@b.com, 555-123-4567.", token="<PII>", names=True)
+
+
 def test_mask_pii_names_custom_token_and_empty():
     pytest.importorskip("spacy")
     if not tp.check_resources()["spacy_model"]:
