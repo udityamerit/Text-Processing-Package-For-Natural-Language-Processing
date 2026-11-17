@@ -116,6 +116,8 @@ The package integrates **spaCy**, **NLTK**, **TextBlob**, **BeautifulSoup4**, an
 
 ## Quickstart and Setup
 
+> New here? Follow the [Hands-On Notebook Guide](#hands-on-notebook-guide) for a cell-by-cell walkthrough of install, cleaning, the `Pipeline` and more.
+
 ### 1. Installation
 
 ```bash
@@ -371,6 +373,8 @@ Below is the complete reference guide for all functions available in the library
 ---
 
 ## Code Examples
+
+> Prefer to run everything yourself? The [Hands-On Notebook Guide](#hands-on-notebook-guide) covers every example below, with outputs, in one notebook.
 
 ### 1. Basic Text Cleaning
 

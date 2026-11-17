@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `examples/NLP_Text_Preprocessing_Complete_Guide.ipynb`: a complete, executed, cell-by-cell notebook guide, linked from the README and from the PyPI project links (`Documentation`).
+
 ## 0.5.1
 
 ### Fixed
