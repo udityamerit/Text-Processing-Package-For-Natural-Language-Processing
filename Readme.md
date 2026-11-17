@@ -89,6 +89,7 @@ The package integrates **spaCy**, **NLTK**, **TextBlob**, **BeautifulSoup4**, an
 pip install nlp-text-preprocessing            # core
 pip install "nlp-text-preprocessing[viz]"     # + wordcloud, matplotlib (get_wordcloud)
 pip install "nlp-text-preprocessing[pandas]"  # + pandas (text_stats_batch, Pipeline.run_series)
+pip install "nlp-text-preprocessing[sklearn]" # + scikit-learn (TextPreprocessor)
 pip install "nlp-text-preprocessing[all]"     # everything optional
 ```
 
@@ -139,6 +140,32 @@ clean_series = pipe.run_series(df['text_column'])
 # Generate diff report of changes
 report = tp.diff_report(raw_texts, clean_batch)
 ```
+
+### Steps with arguments, saving and scikit-learn
+
+```python
+# Pass arguments as (name, {argument: value})
+pipe = tp.Pipeline([
+    'to_lower_case',
+    ('remove_stop_words', {'keep_negations': False}),
+])
+print(pipe)   # Pipeline(['to_lower_case', "remove_stop_words{'keep_negations': False}"])
+
+# Save and reload (custom functions must be registered with @tp.register_step('name'))
+pipe.save('my_pipeline.json')
+pipe = tp.Pipeline.load('my_pipeline.json')
+
+# Use it inside scikit-learn:  pip install "nlp-text-preprocessing[sklearn]"
+from sklearn.pipeline import make_pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+model = make_pipeline(tp.TextPreprocessor(['to_lower_case', 'remove_special_chars']),
+                      TfidfVectorizer())
+X = model.fit_transform(["Hello, World!", "HELLO there"])
+```
+
+Every step except the last must return a string. The last step may return anything,
+for example `Pipeline(['to_lower_case', 'text_stats'])`.
 
 ---
 

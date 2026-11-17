@@ -1025,38 +1025,151 @@ def _resolve_step(step):
         return step
     raise TypeError(f"Invalid pipeline step type: {type(step)}")
 
+def _normalize_step(step):
+    """
+    Turn a step description into ``(function, kwargs, label)``.
+
+    Accepted forms: ``'name'``, ``callable``, ``('name', {kwargs})`` and
+    ``(callable, {kwargs})``. Extra keyword arguments are checked against the
+    function's signature so mistakes surface when the pipeline is built.
+    """
+    kwargs = {}
+    target = step
+    if isinstance(step, (tuple, list)):
+        if len(step) != 2 or not isinstance(step[1], dict):
+            raise TypeError("A step with arguments must be (name_or_callable, {argument: value}).")
+        target, kwargs = step[0], dict(step[1])
+    func = _resolve_step(target)
+    if kwargs:
+        import inspect
+        try:
+            inspect.signature(func).bind(None, **kwargs)
+        except TypeError as exc:
+            raise TypeError(f"Bad arguments for pipeline step "
+                            f"'{getattr(func, '__name__', func)}': {exc}") from None
+    label = target if isinstance(target, str) else getattr(func, '__name__', repr(func))
+    return func, kwargs, label
+
+
 class Pipeline:
     """
     Pipeline engine to chain preprocessing and cleaning steps.
 
     A step is the name of a built-in function (``'remove_urls'``), the name of a
-    function registered with :func:`register_step`, or any callable.
+    function registered with :func:`register_step`, or any callable. To pass
+    arguments use ``('remove_stop_words', {'keep_negations': False})``.
+
+    Every step except the last must return a string; the last step may return
+    anything (for example ``'sentiment_analysis'`` or ``'text_stats'``).
+
+    The class follows the scikit-learn transformer convention (``fit``,
+    ``transform``, ``fit_transform``, ``get_params``, ``set_params``) without
+    importing scikit-learn. For use inside ``sklearn.pipeline.Pipeline`` see
+    :class:`nlp_text_preprocessing.TextPreprocessor`.
     """
     def __init__(self, steps=None):
-        self.steps = list(steps) if steps else []
-        for step in self.steps:           # fail early on a typo, not in the middle of a run
-            _resolve_step(step)
+        self.steps = steps               # stored as given, so sklearn's clone() works
+        self._compiled()                 # fail early on a typo, not in the middle of a run
+
+    def _step_list(self):
+        return list(self.steps) if self.steps else []
+
+    def _compiled(self):
+        return [_normalize_step(s) for s in self._step_list()]
 
     def __repr__(self):
-        names = [s if isinstance(s, str) else getattr(s, '__name__', repr(s)) for s in self.steps]
-        return f"Pipeline({names})"
+        parts = []
+        for func, kwargs, label in self._compiled():
+            parts.append(f"{label}{kwargs!r}" if kwargs else label)
+        return f"Pipeline({parts})"
+
+    def __len__(self):
+        return len(self._step_list())
 
     def add_step(self, step):
-        _resolve_step(step)
-        self.steps.append(step)
+        _normalize_step(step)
+        self.steps = self._step_list() + [step]
         return self
 
-    def run(self, text):
+    @staticmethod
+    def _apply(compiled, text):
         res = text
-        for step in self.steps:
-            res = _resolve_step(step)(res)
+        for i, (func, kwargs, label) in enumerate(compiled):
+            res = func(res, **kwargs)
+            if i < len(compiled) - 1 and not isinstance(res, str):
+                raise TypeError(f"Pipeline step '{label}' returned {type(res).__name__}, but only "
+                                f"the last step may return a non-string.")
         return res
 
+    def run(self, text):
+        return self._apply(self._compiled(), text)
+
     def run_batch(self, texts):
-        return [self.run(t) for t in texts]
+        compiled = self._compiled()      # validate once, reuse for every text
+        return [self._apply(compiled, t) for t in texts]
 
     def run_series(self, series):
-        return series.apply(self.run)
+        compiled = self._compiled()
+        return series.apply(lambda t: self._apply(compiled, t))
+
+    # scikit-learn style API
+    def fit(self, X=None, y=None):
+        self._compiled()
+        return self
+
+    def transform(self, X):
+        return self.run_batch(X)
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X, y).transform(X)
+
+    def get_params(self, deep=True):
+        return {'steps': self.steps}
+
+    def set_params(self, **params):
+        for key, value in params.items():
+            if key != 'steps':
+                raise ValueError(f"Invalid parameter '{key}' for Pipeline.")
+            self.steps = value
+        self._compiled()
+        return self
+
+    # saving and loading
+    def to_config(self):
+        """Return a JSON-serializable list describing the steps."""
+        config = []
+        for func, kwargs, label in self._compiled():
+            name = label
+            if not isinstance(label, str) or (label not in _REGISTERED_STEPS
+                                              and globals().get(label) is not func):
+                raise ValueError(f"Step '{label}' is a custom callable and cannot be saved. "
+                                 f"Register it with @register_step('name') and use that name.")
+            config.append({'step': name, 'args': kwargs} if kwargs else name)
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        steps = []
+        for item in config:
+            if isinstance(item, str):
+                steps.append(item)
+            elif isinstance(item, dict) and 'step' in item:
+                steps.append((item['step'], dict(item.get('args', {}))))
+            else:
+                raise ValueError(f"Invalid pipeline config entry: {item!r}")
+        return cls(steps)
+
+    def save(self, path):
+        import json
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump({'version': 1, 'steps': self.to_config()}, fh, indent=2)
+
+    @classmethod
+    def load(cls, path):
+        import json
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return cls.from_config(data['steps'])
 
     @classmethod
     def default(cls):

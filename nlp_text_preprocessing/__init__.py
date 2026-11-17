@@ -4,6 +4,15 @@ __version__ = "0.3.0"
 
 from .all_text_preprocess import *
 
+
+def __getattr__(name):
+    # Loaded on first access so scikit-learn stays an optional dependency.
+    if name == "TextPreprocessor":
+        from .sklearn_compat import TextPreprocessor
+        return TextPreprocessor
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
     '__version__',
     'download_nltk_packages',

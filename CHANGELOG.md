@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `Pipeline` steps can take arguments: `('remove_stop_words', {'keep_negations': False})`. Arguments are checked when the pipeline is built.
+- `Pipeline.save(path)` / `Pipeline.load(path)` (JSON), `to_config()` / `from_config()`. Custom callables must be registered with `@register_step`.
+- scikit-learn style methods on `Pipeline` (`fit`, `transform`, `fit_transform`, `get_params`, `set_params`) and a new `TextPreprocessor` transformer for `sklearn.pipeline` (optional `[sklearn]` extra).
+- `Pipeline.__len__`, and a `__repr__` that shows step arguments.
+
+### Changed
+- A non-final `Pipeline` step that returns a non-string (for example `text_stats`) now raises a clear `TypeError` instead of silently breaking the chain.
+
 ## 0.3.0
 
 ### Packaging

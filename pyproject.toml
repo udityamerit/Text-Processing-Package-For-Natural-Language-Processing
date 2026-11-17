@@ -43,8 +43,9 @@ dependencies = [
 [project.optional-dependencies]
 pandas = ["pandas"]
 viz = ["wordcloud", "matplotlib"]
-all = ["pandas", "wordcloud", "matplotlib"]
-dev = ["pytest", "build", "twine", "pandas", "wordcloud", "matplotlib"]
+sklearn = ["scikit-learn"]
+all = ["pandas", "wordcloud", "matplotlib", "scikit-learn"]
+dev = ["pytest", "build", "twine", "pandas", "wordcloud", "matplotlib", "scikit-learn"]
 
 [project.urls]
 Homepage = "https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing"
