@@ -102,16 +102,21 @@ def extract_features(x):
     }
 
 
-def clean_text(text):
+def clean_text(text, remove_stopwords=False):
     """
-    Applies a sequence of cleaning and normalization steps on text.
+    End-to-end cleaning: HTML, URLs and emails are removed, text is lower-cased,
+    contractions are expanded, punctuation is dropped and words are lemmatized.
+
+    Set remove_stopwords=True to also drop stop words (negations are kept).
     """
+    text = remove_html_tag(text)
+    text = remove_urls(text)
+    text = remove_emails(text)
     text = to_lower_case(text)
     text = contraction_to_expansion(text)
-    text = remove_emails(text)
-    text = remove_urls(text)
-    text = remove_html_tag(text)
     text = remove_special_chars(text)
+    text = remove_extra_whitespace(text)
     text = lemmatize(text)
-    text = convert_to_base(text)
+    if remove_stopwords:
+        text = remove_stop_words(text)
     return text

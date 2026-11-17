@@ -691,36 +691,39 @@ def _Word(*args, **kwargs):
     return _import_textblob().Word(*args, **kwargs)
 
 
+def _join_tokens(doc, attr='lemma_', only_pos=None):
+    """Rebuilds text from a spaCy doc keeping the original spacing (no "word ." artefacts)."""
+    parts = []
+    for token in doc:
+        if only_pos is None or token.pos_ in only_pos:
+            parts.append(getattr(token, attr) + token.whitespace_)
+        else:
+            parts.append(token.text_with_ws)
+    return ''.join(parts)
+
+
 def convert_to_base(x):
-    """Lemmatizes nouns and verbs in text x using spaCy while leaving other POS tags as-is."""
+    """Lemmatizes only nouns and verbs in text x using spaCy; other words are left as-is."""
     text = _clean_input(x)
     if not text:
         return ""
     doc = _run_spacy(text, disable=('parser', 'ner'))
-    tokens = []
-    for token in doc:
-        if token.pos_ in ['NOUN', 'VERB']:
-            tokens.append(token.lemma_)
-        else:
-            tokens.append(token.text)
-    res = ' '.join(tokens)
-    pattern = r'\s\.'
-    return re.sub(pattern, '.', res)
+    return _join_tokens(doc, only_pos=('NOUN', 'VERB'))
 
 def lemmatize(x):
-    """Lemmatizes all tokens in text x using spaCy."""
+    """Lemmatizes all tokens in text x using spaCy (original spacing is preserved)."""
     text = _clean_input(x)
     if not text:
         return ""
     doc = _run_spacy(text, disable=('parser', 'ner'))
-    return ' '.join([token.lemma_ for token in doc])
+    return _join_tokens(doc)
 
 def extract_entities(x):
     """Extracts named entities (text, label) from text x using spaCy."""
     text = _clean_input(x)
     if not text:
         return []
-    doc = _run_spacy(text)
+    doc = _run_spacy(text, disable=('parser', 'lemmatizer'))
     return [(ent.text, ent.label_) for ent in doc.ents]
 
 def extract_pos_tags(x):
@@ -728,7 +731,7 @@ def extract_pos_tags(x):
     text = _clean_input(x)
     if not text:
         return []
-    doc = _run_spacy(text)
+    doc = _run_spacy(text, disable=('parser', 'ner', 'lemmatizer'))
     return [(token.text, token.pos_, token.tag_) for token in doc]
 
 def get_dependency_tree(x):
@@ -736,76 +739,79 @@ def get_dependency_tree(x):
     text = _clean_input(x)
     if not text:
         return []
-    doc = _run_spacy(text)
+    doc = _run_spacy(text, disable=('ner', 'lemmatizer'))
     return [(token.text, token.dep_, token.head.text) for token in doc]
 
 def detect_language(x):
-    """Detects language code of text x using TextBlob."""
+    """
+    Detects the language of text x and returns its ISO 639-1 code ("en", "fr", "hi", ...).
+
+    Uses the ``langdetect`` package (deterministic). Returns ``"unknown"`` for
+    empty or undetectable text (digits only, emoji only, ...), not a made-up "en".
+    """
     text = _clean_input(x)
-    if not text:
-        return "en"
+    if not re.search(r'[^\W\d_]', text):
+        return "unknown"
     try:
-        return str(_TextBlob(text).detect_language())
-    except Exception:
-        return "en"
+        from langdetect import DetectorFactory, detect
+        from langdetect.lang_detect_exception import LangDetectException
+    except ImportError as e:
+        raise _missing_dependency('langdetect', purpose='detect_language') from e
+    DetectorFactory.seed = 0          # same input -> same answer on every call
+    try:
+        return detect(text)
+    except LangDetectException:
+        return "unknown"
 
 def keyword_extraction(x, top_n=5):
-    """Extracts top_n keyword tokens based on term frequency."""
+    """Extracts the top_n most frequent non-stop-word tokens (any alphabet, 3+ letters)."""
     text = _clean_input(x)
-    words = [w.lower() for w in re.findall(r'\b[a-zA-Z]{3,}\b', text) if w.lower() not in get_stop_words()]
+    stop_words = get_stop_words()
     counts = {}
-    for w in words:
-        counts[w] = counts.get(w, 0) + 1
-    sorted_words = sorted(counts.items(), key=lambda item: item[1], reverse=True)
-    return [w for w, _ in sorted_words[:top_n]]
+    for w in re.findall(r'[^\W\d_]{3,}', text.lower()):
+        if w not in stop_words:
+            counts[w] = counts.get(w, 0) + 1
+    ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)   # stable: ties keep first-seen order
+    return [w for w, _ in ranked[:top_n]]
 
 def text_similarity(x1, x2):
-    """Calculates Jaccard token similarity between text x1 and x2."""
-    words1 = set(to_lower_case(_clean_input(x1)).split())
-    words2 = set(to_lower_case(_clean_input(x2)).split())
-    intersection = words1.intersection(words2)
-    union = words1.union(words2)
-    return round(len(intersection) / max(len(union), 1), 4)
+    """Jaccard similarity of the word sets of x1 and x2 (case- and punctuation-insensitive)."""
+    words1 = set(re.findall(r'\w+', _clean_input(x1).lower()))
+    words2 = set(re.findall(r'\w+', _clean_input(x2).lower()))
+    union = words1 | words2
+    return round(len(words1 & words2) / len(union), 4) if union else 0.0
 
 def get_synonyms(word):
-    """Returns a list of synonyms for a word using NLTK WordNet."""
+    """Returns a sorted list of WordNet synonyms for a word (the word itself excluded)."""
     _require_nltk('wordnet')   # raises a helpful LookupError if missing
-    try:
-        from nltk.corpus import wordnet
-        synonyms = set()
-        for syn in wordnet.synsets(word):
-            for lemma in syn.lemmas():
-                synonyms.add(lemma.name().replace('_', ' '))
-        return list(synonyms)
-    except Exception:
-        return []
+    from nltk.corpus import wordnet
+    query = _clean_input(word).strip().lower()
+    synonyms = set()
+    for syn in wordnet.synsets(query.replace(' ', '_')):
+        for lemma in syn.lemmas():
+            synonyms.add(lemma.name().replace('_', ' '))
+    synonyms.discard(query)
+    return sorted(synonyms)
 
 def get_antonyms(word):
-    """Returns a list of antonyms for a word using NLTK WordNet."""
+    """Returns a sorted list of WordNet antonyms for a word."""
     _require_nltk('wordnet')   # raises a helpful LookupError if missing
-    try:
-        from nltk.corpus import wordnet
-        antonyms = set()
-        for syn in wordnet.synsets(word):
-            for lemma in syn.lemmas():
-                if lemma.antonyms():
-                    antonyms.add(lemma.antonyms()[0].name().replace('_', ' '))
-        return list(antonyms)
-    except Exception:
-        return []
+    from nltk.corpus import wordnet
+    query = _clean_input(word).strip().lower()
+    antonyms = set()
+    for syn in wordnet.synsets(query.replace(' ', '_')):
+        for lemma in syn.lemmas():
+            for ant in lemma.antonyms():
+                antonyms.add(ant.name().replace('_', ' '))
+    return sorted(antonyms)
 
 def chunk_noun_phrases(x):
-    """Extracts noun phrases with character start/end spans."""
+    """Extracts noun phrases with exact character start/end offsets (spaCy noun chunks)."""
     text = _clean_input(x)
     if not text:
         return []
-    blob = _TextBlob(text)
-    res = []
-    for np_item in blob.noun_phrases:
-        start = text.find(np_item)
-        end = start + len(np_item) if start != -1 else len(text)
-        res.append({'phrase': np_item, 'start': start, 'end': end})
-    return res
+    doc = _run_spacy(text, disable=('ner', 'lemmatizer'))
+    return [{'phrase': c.text, 'start': c.start_char, 'end': c.end_char} for c in doc.noun_chunks]
 
 def get_wordcloud(x, save_path=None, show=True):
     """Generates and optionally displays or saves a WordCloud for text x."""
@@ -832,14 +838,37 @@ def get_wordcloud(x, save_path=None, show=True):
         plt.close(fig)
     return cloud
 
+_spelling_cache = {}
+
+
+def _correct_word(word):
+    """Spell-corrects one lowercase alphabetic word (memoised: TextBlob is slow)."""
+    if word not in _spelling_cache:
+        _spelling_cache[word] = str(_Word(word).correct())
+    return _spelling_cache[word]
+
+
 def correct_spelling(x):
-    """Corrects spelling of words in text x using TextBlob."""
+    """
+    Corrects the spelling of the words in text x using TextBlob.
+
+    Punctuation, spacing, numbers, URLs and ALL-CAPS acronyms are left untouched, and
+    the original capitalisation of each word is kept.
+    """
     text = _clean_input(x)
-    words = []
-    for word in text.split():
-        w = _Word(word)
-        words.append(str(w.correct()))
-    return ' '.join(words)
+
+    def _fix(match):
+        word = match.group(1)
+        if word is None:
+            return match.group(0)             # URL / email / @handle / #tag: untouched
+        if len(word) < 2 or word.isupper():
+            return word                       # single letters and ACRONYMS
+        fixed = _correct_word(word.lower())
+        return fixed.capitalize() if word[0].isupper() else fixed
+
+    # Only whole alphabetic tokens are corrected: "3rd", "H2O" and "don't" are skipped.
+    pattern = r"(?:https?://|www\.)\S+|\S+@\S+|[@#]\w+|(?<![\w'’])([^\W\d_]+)(?![\w'’])"
+    return re.sub(pattern, _fix, text)
 
 def get_noun_phrase(x):
     """Extracts noun phrases from text x using TextBlob."""
@@ -850,27 +879,42 @@ def get_noun_phrase(x):
     return list(blob.noun_phrases)
 
 def n_grams(x, n=2):
-    """Generates n-grams from text x using TextBlob."""
-    text = _clean_input(x)
+    """Returns the n-grams of text x as a list of word tuples (punctuation ignored)."""
+    if not isinstance(n, int) or n < 1:
+        raise ValueError("n must be a positive integer")
+    words = re.findall(r"\w+(?:['’]\w+)*", _clean_input(x))
+    return [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
+
+def _inflect(text, source_tag, method):
+    """Applies a TextBlob inflection to words with the given spaCy tag, keeping spacing and case."""
     if not text:
-        return []
-    return list(_TextBlob(text).ngrams(n))
+        return ""
+    doc = _run_spacy(text, disable=('parser', 'ner', 'lemmatizer'))
+    parts = []
+    for token in doc:
+        if token.tag_ == source_tag and token.is_alpha:
+            new = str(getattr(_Word(token.text.lower()), method)())
+            if token.text.isupper() and len(token.text) > 1:
+                new = new.upper()
+            elif token.text[0].isupper():
+                new = new[:1].upper() + new[1:]
+            parts.append(new + token.whitespace_)
+        else:
+            parts.append(token.text_with_ws)
+    return ''.join(parts)
 
 def singularize_words(x):
-    """Converts plural nouns (NNS) to singular in text x using TextBlob."""
-    text = _clean_input(x)
-    if not text:
-        return ""
-    blob = _TextBlob(text)
-    return ' '.join([word.singularize() if tag in ['NNS'] else word for word, tag in blob.tags])
+    """Converts plural nouns (tag NNS) in text x to singular; spacing and punctuation are kept."""
+    return _inflect(_clean_input(x), 'NNS', 'singularize')
 
 def pluralize_words(x):
-    """Converts singular nouns (NN) to plural in text x using TextBlob."""
-    text = _clean_input(x)
-    if not text:
-        return ""
-    blob = _TextBlob(text)
-    return ' '.join([word.pluralize() if tag in ['NN'] else word for word, tag in blob.tags])
+    """
+    Converts singular common nouns (tag NN) in text x to plural; spacing and punctuation are kept.
+
+    Note: this is a purely word-level transformation and does not fix agreement
+    ("the dog is barking" -> "the dogs is barking").
+    """
+    return _inflect(_clean_input(x), 'NN', 'pluralize')
 
 # Safety and Moderation
 
@@ -881,17 +925,11 @@ def detect_profanity(x):
     return len(words.intersection(PROFANITY_WORDS)) > 0
 
 def censor_profanity(x):
-    """Censors profanity words in text x with asterisks (****)."""
+    """Replaces each profane word in text x with asterisks; everything else is untouched."""
     text = _clean_input(x)
-    words = text.split()
-    res = []
-    for w in words:
-        clean_w = re.sub(r'[^\w]', '', w).lower()
-        if clean_w in PROFANITY_WORDS:
-            res.append('*' * len(w))
-        else:
-            res.append(w)
-    return ' '.join(res)
+    return re.sub(r'\b\w+\b',
+                  lambda m: '*' * len(m.group(0)) if m.group(0).lower() in PROFANITY_WORDS else m.group(0),
+                  text)
 
 def detect_toxicity(x):
     """Calculates a baseline toxicity score (0.0 to 1.0) based on insult/hate keywords."""
@@ -904,26 +942,49 @@ def detect_toxicity(x):
 
 def detect_spam_signals(x):
     """Detects spam signals (excessive caps, punctuation, or URL density)."""
+    caps = capital_ratio(x) > 0.4
+    punct = punctuation_density(x) > 0.2
+    urls = count_urls(x)
     return {
-        'excessive_caps': capital_ratio(x) > 0.4,
-        'excessive_punctuation': punctuation_density(x) > 0.2,
-        'has_url': count_urls(x) > 0,
-        'is_spam_candidate': capital_ratio(x) > 0.4 or punctuation_density(x) > 0.2 or count_urls(x) > 2
+        'excessive_caps': caps,
+        'excessive_punctuation': punct,
+        'has_url': urls > 0,
+        'is_spam_candidate': caps or punct or urls > 2
     }
 
 # Sentiment & Classification
 
-def sentiment_analysis(x):
-    """Performs sentiment analysis on text x using TextBlob NaiveBayesAnalyzer."""
+def sentiment_analysis(x, method='pattern', threshold=0.05):
+    """
+    Classifies the sentiment of text x as ``'pos'``, ``'neg'`` or ``'neu'``.
+
+    method='pattern'      (default) TextBlob's lexicon polarity: instant, no extra
+                          downloads. Scores within +/-``threshold`` count as 'neu'.
+    method='naive_bayes'  legacy TextBlob NaiveBayes model trained on movie reviews.
+                          Needs the ``movie_reviews`` corpus, takes ~30 s to train on
+                          first use, and only ever answers 'pos' / 'neg'.
+    Empty text is 'neu' (it used to be reported as 'pos').
+    """
     text = _clean_input(x)
-    if not text:
+    if method not in ('pattern', 'naive_bayes'):
+        raise ValueError("method must be 'pattern' or 'naive_bayes'")
+    if not text.strip():
+        return "neu"
+    if method == 'naive_bayes':
+        analyzer = _get_naive_bayes_analyzer()
+        return _TextBlob(text, analyzer=analyzer).sentiment.classification
+    polarity = _TextBlob(text).sentiment.polarity
+    if polarity > threshold:
         return "pos"
-    analyzer = _get_naive_bayes_analyzer()
-    return _TextBlob(text, analyzer=analyzer).sentiment.classification
+    if polarity < -threshold:
+        return "neg"
+    return "neu"
 
 def polarity_subjectivity(x):
     """Returns pattern-based sentiment polarity (-1.0 to 1.0) and subjectivity (0.0 to 1.0)."""
     text = _clean_input(x)
+    if not text.strip():
+        return {'polarity': 0.0, 'subjectivity': 0.0}
     blob = _TextBlob(text)
     return {'polarity': blob.sentiment.polarity, 'subjectivity': blob.sentiment.subjectivity}
 
@@ -951,32 +1012,44 @@ def register_step(name):
         return func
     return decorator
 
+def _resolve_step(step):
+    if isinstance(step, str):
+        if step in _REGISTERED_STEPS:
+            return _REGISTERED_STEPS[step]
+        func = globals().get(step)
+        # Only public functions can be used by name (not helpers like _clean_input or classes).
+        if not step.startswith('_') and callable(func) and not isinstance(func, type):
+            return func
+        raise ValueError(f"Pipeline step '{step}' is not available.")
+    if callable(step):
+        return step
+    raise TypeError(f"Invalid pipeline step type: {type(step)}")
+
 class Pipeline:
     """
     Pipeline engine to chain preprocessing and cleaning steps.
+
+    A step is the name of a built-in function (``'remove_urls'``), the name of a
+    function registered with :func:`register_step`, or any callable.
     """
     def __init__(self, steps=None):
-        self.steps = steps or []
+        self.steps = list(steps) if steps else []
+        for step in self.steps:           # fail early on a typo, not in the middle of a run
+            _resolve_step(step)
+
+    def __repr__(self):
+        names = [s if isinstance(s, str) else getattr(s, '__name__', repr(s)) for s in self.steps]
+        return f"Pipeline({names})"
 
     def add_step(self, step):
+        _resolve_step(step)
         self.steps.append(step)
         return self
 
     def run(self, text):
         res = text
         for step in self.steps:
-            if isinstance(step, str):
-                if step in _REGISTERED_STEPS:
-                    func = _REGISTERED_STEPS[step]
-                elif step in globals() and callable(globals()[step]):
-                    func = globals()[step]
-                else:
-                    raise ValueError(f"Pipeline step '{step}' is not available.")
-            elif callable(step):
-                func = step
-            else:
-                raise TypeError(f"Invalid pipeline step type: {type(step)}")
-            res = func(res)
+            res = _resolve_step(step)(res)
         return res
 
     def run_batch(self, texts):
@@ -987,12 +1060,16 @@ class Pipeline:
 
     @classmethod
     def default(cls):
-        return cls(['to_lower_case', 'contraction_to_expansion', 'remove_emails', 'remove_urls', 'remove_html_tag', 'remove_special_chars', 'remove_extra_whitespace'])
+        return cls(['remove_html_tag', 'remove_urls', 'remove_emails', 'to_lower_case',
+                    'contraction_to_expansion', 'remove_special_chars', 'remove_extra_whitespace'])
 
 def diff_report(before_list, after_list):
     """
     Generates a summary diff report comparing text before and after pipeline runs.
     """
+    before_list, after_list = list(before_list), list(after_list)
+    if len(before_list) != len(after_list):
+        raise ValueError("before_list and after_list must have the same length")
     total_items = len(before_list)
     chars_before = sum(len(_clean_input(t)) for t in before_list)
     chars_after = sum(len(_clean_input(t)) for t in after_list)
