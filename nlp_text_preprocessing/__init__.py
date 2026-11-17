@@ -85,6 +85,7 @@ __all__ = [
     'sentiment_analysis',
     'polarity_subjectivity',
     'emotion_detection',
+    'toxicity_report',
     'Pipeline',
     'register_step',
     'diff_report',

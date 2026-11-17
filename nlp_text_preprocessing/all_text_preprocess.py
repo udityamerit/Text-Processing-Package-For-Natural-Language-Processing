@@ -271,16 +271,58 @@ EMOJI_NAME_MAP = {
     '💯': 'hundred_points',
 }
 
-PROFANITY_WORDS = {'damn', 'hell', 'crap', 'bastard', 'bitch', 'fuck', 'shit', 'asshole', 'dick'}
+# --- Word lists for the moderation helpers -------------------------------------------
+# These are small, transparent English baselines, NOT a moderation system. Extend them
+# with the ``extra_words`` argument, and use a trained model for anything high-stakes.
+# Words are listed in their base form; plurals and endings (-s, -ed, -ing, -er, -y) and
+# simple leetspeak ("sh1t", "@ss") are matched automatically.
+
+# Strong words are always flagged. Mild words are everyday speech and can be switched
+# off with ``include_mild=False``.
+PROFANITY_STRONG = {
+    'fuck', 'motherfucker', 'shit', 'bullshit', 'shithead', 'dipshit', 'bitch', 'bastard',
+    'asshole', 'arsehole', 'asshat', 'dick', 'dickhead', 'prick', 'cunt', 'twat', 'wanker',
+    'bollocks', 'slut', 'whore', 'douche', 'douchebag', 'dumbass', 'jackass',
+}
+PROFANITY_MILD = {'damn', 'goddamn', 'hell', 'crap', 'piss', 'ass', 'arse', 'bloody'}
+PROFANITY_WORDS = PROFANITY_STRONG | PROFANITY_MILD   # kept for backward compatibility
+
+# Phrases that contain a profane-looking word but are not profanity.
+_PROFANITY_SAFE_PHRASES = re.compile(r"\bhell['’]?s\s+kitchen\b|\bhell\s+on\s+earth\b", re.IGNORECASE)
 
 EMOTION_LEXICON = {
-    'joy': {'happy', 'joy', 'love', 'delight', 'wonderful', 'fantastic', 'great', 'glad', 'excited', 'blessed', 'cheerful', 'amazing'},
-    'anger': {'angry', 'rage', 'hate', 'furious', 'annoyed', 'mad', 'hostile', 'disgusted', 'outraged', 'irritated'},
-    'sadness': {'sad', 'depressed', 'unhappy', 'sorrow', 'grief', 'miserable', 'heartbroken', 'gloomy', 'disappointed'},
-    'fear': {'fear', 'scared', 'afraid', 'terrified', 'anxious', 'panic', 'nervous', 'frightened', 'dread'}
+    'joy': {'happy', 'joy', 'joyful', 'love', 'delight', 'delighted', 'wonderful', 'fantastic', 'great',
+            'glad', 'excited', 'blessed', 'cheerful', 'amazing', 'awesome', 'thrilled', 'grateful',
+            'pleased', 'proud', 'fun', 'enjoy', 'celebrate', 'smile', 'laugh', 'brilliant', 'lovely'},
+    'anger': {'angry', 'rage', 'hate', 'furious', 'annoyed', 'mad', 'hostile', 'disgusted', 'outraged',
+              'irritated', 'annoying', 'resent', 'bitter', 'livid', 'fume', 'infuriating', 'enraged'},
+    'sadness': {'sad', 'depressed', 'unhappy', 'sorrow', 'grief', 'miserable', 'heartbroken', 'gloomy',
+                'disappointed', 'lonely', 'hopeless', 'cry', 'weep', 'mourn', 'upset', 'hurt', 'regret'},
+    'fear': {'fear', 'scared', 'afraid', 'terrified', 'anxious', 'panic', 'nervous', 'frightened', 'dread',
+             'worried', 'worry', 'terror', 'alarmed', 'uneasy', 'horrified', 'petrified'},
 }
 
-TOXICITY_WORDS = {'hate', 'stupid', 'idiot', 'fool', 'loser', 'kill', 'ugly', 'trash', 'dumb', 'scum', 'nasty', 'horrible'}
+# Toxicity: insults score on their own at half weight and at full weight when they are
+# aimed at a person; threat verbs only count when aimed at a person ("kill the process"
+# is fine); a negation just before a word cancels it ("I do not hate you").
+TOXICITY_INSULTS = {
+    'idiot', 'stupid', 'moron', 'dumb', 'dumbass', 'loser', 'scum', 'fool', 'imbecile', 'cretin',
+    'jerk', 'creep', 'lowlife', 'incompetent', 'clueless', 'brainless',
+}
+TOXICITY_THREATS = {'kill', 'murder', 'die', 'hurt', 'punch', 'stab', 'hate', 'harm'}
+# Words that are only an insult when aimed at someone ("take out the trash" is fine).
+TOXICITY_DESCRIPTIVE = {'ugly', 'nasty', 'horrible', 'disgusting', 'pathetic', 'worthless', 'trash', 'garbage'}
+TOXICITY_WORDS = TOXICITY_INSULTS | TOXICITY_THREATS | TOXICITY_DESCRIPTIVE   # backward compatibility
+_TOXICITY_TARGETS = frozenset({
+    'you', 'your', 'yours', 'yourself', "you're", 'youre', 'u', 'ur', 'him', 'her', 'them', 'he', 'she',
+    'they', 'his', 'hers', 'their', 'everyone', 'all', 'people', 'guys',
+})
+
+_SPAM_PHRASES = (
+    'buy now', 'click here', 'free money', 'act now', 'limited time', 'you have won', 'you won',
+    'winner', 'congratulations', '100% free', 'risk free', 'no obligation', 'order now', 'cash prize',
+    'make money fast', 'work from home', 'double your', 'claim your',
+)
 
 
 # Compiled patterns shared by the cleaning / counting helpers
@@ -918,38 +960,149 @@ def pluralize_words(x):
 
 # Safety and Moderation
 
-def detect_profanity(x):
-    """Returns True if text x contains profanity words."""
-    text = _clean_input(x).lower()
-    words = set(re.findall(r'\b\w+\b', text))
-    return len(words.intersection(PROFANITY_WORDS)) > 0
+_LEET = str.maketrans({'0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's'})
+_MOD_TOKEN_RE = re.compile(r"[\w@$]+(?:['’]\w+)*")
 
-def censor_profanity(x):
-    """Replaces each profane word in text x with asterisks; everything else is untouched."""
+
+def _normalize_token(token):
+    """Lower-case a token, drop a possessive 's and undo simple leetspeak ("sh1t" -> "shit")."""
+    tok = token.replace('’', "'").lower()
+    if tok.endswith("'s"):
+        tok = tok[:-2]
+    if any(c.isalpha() for c in tok) and any(c in '013457@$' for c in tok):
+        tok = tok.translate(_LEET)
+    return tok
+
+
+def _word_forms(word):
+    """The word plus the base forms it could come from ("loved" -> love, "shitty" -> shit)."""
+    forms = {word}
+    for suffix in ('ing', 'ed', 'er', 'ers', 'est', 'es', 's', 'd', 'ly', 'y'):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            stem = word[:-len(suffix)]
+            forms.add(stem)
+            forms.add(stem + 'e')
+            if stem[-1] == stem[-2]:                 # shitting -> shitt -> shit
+                forms.add(stem[:-1])
+            if stem.endswith('i'):                   # happier -> happi -> happy
+                forms.add(stem[:-1] + 'y')
+    return forms
+
+
+def _in_lexicon(token, lexicon):
+    return not _word_forms(_normalize_token(token)).isdisjoint(lexicon)
+
+
+def _is_negated(tokens, index, window=3):
+    """True if a negation word appears in the ``window`` tokens before ``index``."""
+    for prev in tokens[max(0, index - window):index]:
+        low = prev.replace('’', "'").lower()
+        if low in NEGATION_WORDS or low.endswith("n't"):
+            return True
+    return False
+
+
+def _profanity_lexicon(include_mild, extra_words, allow_words):
+    lexicon = set(PROFANITY_STRONG)
+    if include_mild:
+        lexicon |= PROFANITY_MILD
+    lexicon |= {w.lower() for w in extra_words}
+    return lexicon - {w.lower() for w in allow_words}
+
+
+def _profane_spans(text, include_mild, extra_words, allow_words):
+    lexicon = _profanity_lexicon(include_mild, extra_words, allow_words)
+    safe = [m.span() for m in _PROFANITY_SAFE_PHRASES.finditer(text)]
+    spans = []
+    for m in _MOD_TOKEN_RE.finditer(text):
+        if any(s <= m.start() < e for s, e in safe):
+            continue
+        if _in_lexicon(m.group(0), lexicon):
+            spans.append(m.span())
+    return spans
+
+
+def detect_profanity(x, include_mild=True, extra_words=(), allow_words=()):
+    """
+    Returns True if text x contains profanity.
+
+    Plurals/endings ("shitty", "bitches") and simple leetspeak ("sh1t", "@sshole") are
+    matched. ``include_mild=False`` ignores everyday words such as "damn" and "hell".
+    ``extra_words`` adds your own words (for example slurs relevant to your community)
+    and ``allow_words`` removes some. "Hell's Kitchen" is not flagged.
+    """
+    return bool(_profane_spans(_clean_input(x), include_mild, extra_words, allow_words))
+
+
+def censor_profanity(x, include_mild=True, extra_words=(), allow_words=(), mask_char='*'):
+    """Replaces each profane word with ``mask_char``; everything else is untouched."""
     text = _clean_input(x)
-    return re.sub(r'\b\w+\b',
-                  lambda m: '*' * len(m.group(0)) if m.group(0).lower() in PROFANITY_WORDS else m.group(0),
-                  text)
+    for start, end in reversed(_profane_spans(text, include_mild, extra_words, allow_words)):
+        text = text[:start] + mask_char * (end - start) + text[end:]
+    return text
+
+
+def toxicity_report(x):
+    """
+    Explains the toxicity score: ``{'score': float, 'matches': [...], 'ignored': [...]}``.
+
+    Each match is ``{'word', 'weight', 'targeted'}``. Insults and strong profanity weigh
+    0.5, or 1.0 when aimed at a person (you / him / them ... within 3 words). Threat words
+    ("kill", "hurt", "hate") only count when aimed at a person. A negation in the 3 words
+    before a match cancels it and lists it under ``ignored``.
+    """
+    text = _clean_input(x)
+    tokens = _MOD_TOKEN_RE.findall(text)
+    matches, ignored = [], []
+    for i, tok in enumerate(tokens):
+        in_insults = _in_lexicon(tok, TOXICITY_INSULTS)
+        targeted_only = _in_lexicon(tok, TOXICITY_THREATS) or _in_lexicon(tok, TOXICITY_DESCRIPTIVE)
+        in_profane = _in_lexicon(tok, PROFANITY_STRONG)
+        if not (in_insults or targeted_only or in_profane):
+            continue
+        neighbours = tokens[max(0, i - 3):i] + tokens[i + 1:i + 4]
+        targeted = any(n.replace('’', "'").lower() in _TOXICITY_TARGETS for n in neighbours)
+        if targeted_only and not (in_insults or in_profane) and not targeted:
+            continue
+        entry = {'word': tok.lower(), 'weight': 1.0 if targeted else 0.5, 'targeted': targeted}
+        (ignored if _is_negated(tokens, i) else matches).append(entry)
+    total = sum(m['weight'] for m in matches)
+    return {'score': round(1 - 0.5 ** total, 4), 'matches': matches, 'ignored': ignored}
+
 
 def detect_toxicity(x):
-    """Calculates a baseline toxicity score (0.0 to 1.0) based on insult/hate keywords."""
-    text = _clean_input(x).lower()
-    words = re.findall(r'\b\w+\b', text)
-    if not words:
-        return 0.0
-    toxic_count = sum(1 for w in words if w in TOXICITY_WORDS)
-    return round(toxic_count / len(words), 4)
+    """
+    Baseline toxicity score from 0.0 to 1.0 from a small lexicon (see :func:`toxicity_report`).
+
+    One insult aimed at someone scores 0.5, and the score approaches 1.0 as hits add up.
+    "kill the process" and "I do not hate you" score 0. This is a keyword baseline that
+    cannot understand sarcasm or context; use a trained model for real moderation.
+    """
+    return toxicity_report(x)['score']
+
 
 def detect_spam_signals(x):
-    """Detects spam signals (excessive caps, punctuation, or URL density)."""
-    caps = capital_ratio(x) > 0.4
-    punct = punctuation_density(x) > 0.2
-    urls = count_urls(x)
+    """
+    Detects spam signals: shouting (long all-caps text), runs of punctuation, links and
+    typical spam phrases ("buy now", "click here").
+
+    Returns the individual signals plus ``spam_phrases`` (the phrases found) and
+    ``is_spam_candidate``, which needs at least two signals or three links. Short
+    messages such as "OK" or "Hi!" are never flagged for caps or punctuation alone.
+    """
+    text = _clean_input(x)
+    lowered = text.lower()
+    caps = word_count(text) >= 3 and capital_ratio(text) > 0.5
+    punct = bool(re.search(r'[!?]{3,}', text)) or (len(text) >= 20 and punctuation_density(text) > 0.2)
+    urls = count_urls(text)
+    phrases = [p for p in _SPAM_PHRASES if p in lowered]
+    signals = int(caps) + int(punct) + int(bool(phrases)) + int(urls > 0)
     return {
         'excessive_caps': caps,
         'excessive_punctuation': punct,
         'has_url': urls > 0,
-        'is_spam_candidate': caps or punct or urls > 2
+        'spam_phrases': phrases,
+        'is_spam_candidate': signals >= 2 or urls > 2 or len(phrases) >= 2,
     }
 
 # Sentiment & Classification
@@ -989,13 +1142,20 @@ def polarity_subjectivity(x):
     return {'polarity': blob.sentiment.polarity, 'subjectivity': blob.sentiment.subjectivity}
 
 def emotion_detection(x):
-    """Calculates lexicon-based emotion counts (joy, anger, sadness, fear)."""
-    text = _clean_input(x).lower()
-    words = re.findall(r'\b\w+\b', text)
-    res = {'joy': 0, 'anger': 0, 'sadness': 0, 'fear': 0}
-    for w in words:
+    """
+    Calculates lexicon-based emotion counts (joy, anger, sadness, fear).
+
+    Word endings are handled ("loved", "happier", "worrying"), and an emotion word is
+    ignored when a negation comes within the 2 words before it ("not happy" is not joy).
+    """
+    tokens = _MOD_TOKEN_RE.findall(_clean_input(x))
+    res = {emotion: 0 for emotion in EMOTION_LEXICON}
+    for i, tok in enumerate(tokens):
+        if _is_negated(tokens, i, window=2):
+            continue
+        forms = _word_forms(tok.replace('’', "'").lower())
         for emotion, word_set in EMOTION_LEXICON.items():
-            if w in word_set:
+            if not forms.isdisjoint(word_set):
                 res[emotion] += 1
     return res
 

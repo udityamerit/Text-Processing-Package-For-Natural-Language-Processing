@@ -66,7 +66,7 @@ It provides over **60 single-purpose functions** and an extensible **Pipeline En
 - **Advanced Cleaning**: Remove emojis, phone numbers, PII mask, URLs, emails, HTML, retweets, special symbols, and expand contractions/hashtags.
 - **Feature & Readability Extraction**: Extract word counts, sentence counts, readability scores (Flesch Ease), punctuation density, capital ratios, and full batch statistics.
 - **Linguistic Utilities**: Named Entity Recognition (NER), POS tagging, dependency parsing, language detection, keyword extraction, synonyms, antonyms, and n-grams.
-- **Safety & Moderation**: Profanity detection/censoring, toxicity scores, and spam signal detection.
+- **Safety & Moderation (baseline)**: Lexicon-based profanity, toxicity, spam and emotion helpers. They are transparent keyword baselines, not a moderation system: use a trained model for anything high-stakes.
 - **Visualization**: Generate and save custom WordClouds to disk or display interactively.
 
 ---
@@ -257,13 +257,14 @@ Below is the complete reference guide for all functions available in the library
 
 | Function | Parameters | Return Type | Description |
 | :--- | :--- | :--- | :--- |
-| `detect_profanity(x)` | `x: str` | `bool` | Returns True if text contains profanity words. |
-| `censor_profanity(x)` | `x: str` | `str` | Censors profanity words with asterisks (`****`). |
-| `detect_toxicity(x)` | `x: str` | `float` | Calculates baseline toxicity score (0.0 to 1.0). |
-| `detect_spam_signals(x)` | `x: str` | `dict` | Returns spam flags for excessive caps, punctuation, and URL density. |
+| `detect_profanity(x, include_mild=True, extra_words=(), allow_words=())` | `x: str` | `bool` | True if the text has profanity. Matches endings (`shitty`) and leetspeak (`sh1t`); ignores `Hell's Kitchen`; `include_mild=False` skips words like `damn`. Masked words such as `f***` are not detected. |
+| `censor_profanity(x, include_mild=True, extra_words=(), allow_words=(), mask_char='*')` | `x: str` | `str` | Masks each profane word, keeping its length and the text layout. |
+| `detect_toxicity(x)` | `x: str` | `float` | Score from 0.0 to 1.0. Counts insults and threats aimed at people; `kill the process` and `I do not hate you` score 0. |
+| `toxicity_report(x)` | `x: str` | `dict` | Explains the score: `score`, `matches` (word, weight, targeted) and `ignored` (negated) words. |
+| `detect_spam_signals(x)` | `x: str` | `dict` | Flags shouting, punctuation runs, links and spam phrases (`spam_phrases`); `is_spam_candidate` needs at least two signals. Short texts like `OK` are not flagged. |
 | `sentiment_analysis(x, method='pattern')` | `x: str` | `str` | `'pos'` / `'neg'` / `'neu'`. Default is instant; `method='naive_bayes'` is the legacy opt-in model. |
 | `polarity_subjectivity(x)`| `x: str` | `dict` | Returns fast pattern-based sentiment polarity (-1.0 to 1.0) and subjectivity. |
-| `emotion_detection(x)` | `x: str` | `dict` | Calculates lexicon-based emotion counts (joy, anger, sadness, fear). |
+| `emotion_detection(x)` | `x: str` | `dict` | Emotion counts (joy, anger, sadness, fear). Handles endings (`loved`, `happier`) and ignores negated words (`not happy`). |
 
 ---
 

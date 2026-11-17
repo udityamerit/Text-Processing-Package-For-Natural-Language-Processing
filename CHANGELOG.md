@@ -8,6 +8,13 @@
 - scikit-learn style methods on `Pipeline` (`fit`, `transform`, `fit_transform`, `get_params`, `set_params`) and a new `TextPreprocessor` transformer for `sklearn.pipeline` (optional `[sklearn]` extra).
 - `Pipeline.__len__`, and a `__repr__` that shows step arguments.
 
+### Changed (moderation helpers)
+- `detect_profanity` / `censor_profanity`: a much larger word list in two tiers (strong and mild), matching of word endings and simple leetspeak, `Hell's Kitchen` is no longer flagged, and new options `include_mild`, `extra_words`, `allow_words` (and `mask_char` for censoring).
+- `detect_toxicity`: no longer the share of toxic words. Insults and threats aimed at a person count, `kill the process` / `take out the trash` do not, and a negation cancels a match (`I do not hate you` is 0). New `toxicity_report()` explains each score.
+- `detect_spam_signals`: short texts such as `OK` or `Hi!` are no longer spam; spam phrases (`buy now`, `click here`) are detected and returned in `spam_phrases`; `is_spam_candidate` needs at least two signals.
+- `emotion_detection`: bigger lexicon, handles word endings (`loved`, `happier`, `worrying`) and ignores negated words (`not happy`).
+- The word lists are documented as baselines, and the README no longer presents them as production moderation.
+
 ### Changed
 - A non-final `Pipeline` step that returns a non-string (for example `text_stats`) now raises a clear `TypeError` instead of silently breaking the chain.
 
