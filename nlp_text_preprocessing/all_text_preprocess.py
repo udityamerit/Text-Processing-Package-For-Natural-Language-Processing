@@ -1,21 +1,21 @@
 # All text preprocess code is here
+#
+# Design notes
+# ------------
+# * Importing this module is cheap: heavy libraries (spaCy, TextBlob, NLTK,
+#   matplotlib, wordcloud, BeautifulSoup, pandas) are imported lazily, only
+#   when a function that needs them is called.
+# * Nothing is downloaded or installed behind your back. Run
+#   ``download_nltk_packages()`` once, or ``check_resources()`` to see what is
+#   missing.
 
 import os
+import sys
 import json
 import re
 import math
 import warnings
 import unicodedata
-
-import spacy
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud
-from bs4 import BeautifulSoup
-from textblob import TextBlob
-from textblob import Word
-from textblob.sentiments import NaiveBayesAnalyzer
-from spacy.lang.en.stop_words import STOP_WORDS as sw
-import nltk
 
 fpath = os.path.join(os.path.dirname(__file__), 'data', 'contractions.json')
 try:
@@ -25,67 +25,204 @@ except Exception as e:
     warnings.warn(f"Could not load contractions.json from {fpath}: {e}")
     contractions = {}
 
-# Lazy-loaded spaCy model container
-_nlp = None
+DEFAULT_SPACY_MODEL = 'en_core_web_sm'
+AUTO_DOWNLOAD_ENV = 'NLP_TEXT_PREPROCESSING_AUTO_DOWNLOAD'
 
-def get_spacy_nlp(model_name='en_core_web_sm'):
-    """
-    Lazy-loads and caches the spaCy language model.
-    Downloads the model automatically if missing.
-    """
-    global _nlp
-    if _nlp is None:
-        try:
-            _nlp = spacy.load(model_name)
-        except OSError:
-            warnings.warn(f"Downloading spaCy model '{model_name}'...")
-            from spacy.cli import download
-            download(model_name)
-            _nlp = spacy.load(model_name)
-    return _nlp
 
-# List of NLTK packages and their corresponding resource paths for checking
-nltk_packages = [
-    ('punkt_tab', 'tokenizers/punkt_tab'),
-    ('stopwords', 'corpora/stopwords'),
-    ('averaged_perceptron_tagger', 'taggers/averaged_perceptron_tagger'),
-    ('tagsets_json', 'help/tagsets_json'),
-    ('wordnet', 'corpora/wordnet'),
-    ('words', 'corpora/words'),
-    ('maxent_ne_chunker_tab', 'chunkers/maxent_ne_chunker_tab'),
-    ('movie_reviews', 'corpora/movie_reviews'),
-    ('brown', 'corpora/brown'),
-]
+# ---------------------------------------------------------------------------
+# Lazy dependency helpers
+# ---------------------------------------------------------------------------
 
-def download_nltk_packages():
-    """
-    Downloads the required NLTK packages.
-    """
-    for package, _ in nltk_packages:
-        nltk.download(package)
+def _missing_dependency(package, extra=None, purpose=None):
+    hint = f"pip install {package}"
+    if extra:
+        hint = f"pip install 'nlp-text-preprocessing[{extra}]'  (or: pip install {package})"
+    what = f" for {purpose}" if purpose else ""
+    return ImportError(f"'{package}' is required{what} but is not installed. Install it with: {hint}")
 
-# Check if NLTK packages are present; if not, instruct the user to download them
-missing_packages = []
-for package, resource in nltk_packages:
+
+def _import_spacy():
     try:
-        nltk.data.find(resource)
-    except LookupError:
-        missing_packages.append(package)
+        import spacy
+        return spacy
+    except ImportError as e:
+        raise _missing_dependency('spacy', purpose='linguistic features') from e
 
-if missing_packages:
-    warnings.warn(
-        f"The following NLTK packages are missing: {', '.join(missing_packages)}. "
-        "Please run 'download_nltk_packages()' to download them."
-    )
 
-# Lazy-loaded NaiveBayesAnalyzer instance for sentiment analysis
+def _import_textblob():
+    try:
+        import textblob
+        return textblob
+    except ImportError as e:
+        raise _missing_dependency('textblob', purpose='this function') from e
+
+
+# ---------------------------------------------------------------------------
+# Resource management (spaCy model + NLTK corpora)
+# ---------------------------------------------------------------------------
+
+# resource name -> (list of acceptable nltk.data.find() paths, why it is needed)
+# Both the unpacked and the zipped location are accepted: NLTK >= 3.9 keeps
+# some corpora (e.g. wordnet) only as .zip, which a plain find('corpora/wordnet')
+# reports as missing even though it loads fine.
+NLTK_RESOURCES = {
+    'punkt_tab': (['tokenizers/punkt_tab'], 'TextBlob tokenization (noun phrases, tags, sentiment)'),
+    'wordnet': (['corpora/wordnet', 'corpora/wordnet.zip'], 'get_synonyms / get_antonyms'),
+    'omw-1.4': (['corpora/omw-1.4', 'corpora/omw-1.4.zip'], 'WordNet lookups on recent NLTK versions'),
+    'movie_reviews': (['corpora/movie_reviews', 'corpora/movie_reviews.zip'],
+                      "sentiment_analysis(method='naive_bayes') only"),
+}
+# Resources installed by download_nltk_packages() by default.
+_DEFAULT_NLTK_DOWNLOADS = ('punkt_tab', 'wordnet', 'omw-1.4')
+
+
+def _nltk_has(resource):
+    try:
+        import nltk
+    except ImportError:
+        return False
+    for path in NLTK_RESOURCES[resource][0]:
+        try:
+            nltk.data.find(path)
+            return True
+        except LookupError:
+            continue
+    return False
+
+
+def check_resources(include_optional=False, verbose=False):
+    """
+    Reports which models / corpora are missing (nothing is downloaded).
+
+    Returns a dict ``{'spacy_model': bool, 'nltk': {name: bool}}``. By default
+    the optional ``movie_reviews`` corpus (only used by the legacy Naive Bayes
+    sentiment method) is not included.
+    """
+    try:
+        import spacy.util
+        spacy_ok = spacy.util.is_package(DEFAULT_SPACY_MODEL)
+    except ImportError:
+        spacy_ok = False
+    names = list(_DEFAULT_NLTK_DOWNLOADS) + (['movie_reviews'] if include_optional else [])
+    report = {'spacy_model': spacy_ok, 'nltk': {n: _nltk_has(n) for n in names}}
+    if verbose:
+        print(f"spaCy model '{DEFAULT_SPACY_MODEL}': {'OK' if spacy_ok else 'MISSING'}")
+        for n, ok in report['nltk'].items():
+            print(f"NLTK '{n}' ({NLTK_RESOURCES[n][1]}): {'OK' if ok else 'MISSING'}")
+        if not spacy_ok or not all(report['nltk'].values()):
+            print("Run nlp_text_preprocessing.download_nltk_packages() to install what is missing.")
+    return report
+
+
+def download_nltk_packages(spacy_model=DEFAULT_SPACY_MODEL, include_sentiment_corpus=False):
+    """
+    One-time setup: downloads the NLTK data this package needs and, unless
+    ``spacy_model=None``, the spaCy model.
+
+    Set ``include_sentiment_corpus=True`` to also fetch ``movie_reviews``
+    (only needed for ``sentiment_analysis(method='naive_bayes')``).
+    """
+    import nltk
+    names = list(_DEFAULT_NLTK_DOWNLOADS) + (['movie_reviews'] if include_sentiment_corpus else [])
+    for package in names:
+        if not _nltk_has(package):
+            nltk.download(package)
+    if spacy_model:
+        spacy = _import_spacy()
+        import spacy.util
+        if not spacy.util.is_package(spacy_model):
+            from spacy.cli import download
+            download(spacy_model)
+
+
+def _require_nltk(resource):
+    if not _nltk_has(resource):
+        raise LookupError(
+            f"NLTK resource '{resource}' is not installed (needed for {NLTK_RESOURCES[resource][1]}). "
+            "Run: python -c \"import nlp_text_preprocessing as tp; tp.download_nltk_packages()\""
+        )
+
+
+# spaCy models, cached per model name.
+_nlp_cache = {}
+
+
+def get_spacy_nlp(model_name=DEFAULT_SPACY_MODEL, auto_download=None):
+    """
+    Lazy-loads and caches a spaCy language model (one cache entry per name).
+
+    If the model is not installed a clear ``OSError`` explains how to get it.
+    The model is only downloaded automatically when ``auto_download=True`` or
+    the environment variable NLP_TEXT_PREPROCESSING_AUTO_DOWNLOAD=1 is set.
+    """
+    if model_name in _nlp_cache:
+        return _nlp_cache[model_name]
+    spacy = _import_spacy()
+    try:
+        nlp = spacy.load(model_name)
+    except OSError as e:
+        if auto_download is None:
+            auto_download = os.environ.get(AUTO_DOWNLOAD_ENV, '') == '1'
+        if not auto_download:
+            raise OSError(
+                f"spaCy model '{model_name}' is not installed. Install it with:\n"
+                f"    python -m spacy download {model_name}\n"
+                "or call nlp_text_preprocessing.download_nltk_packages()."
+            ) from e
+        from spacy.cli import download
+        download(model_name)
+        nlp = spacy.load(model_name)
+    _nlp_cache[model_name] = nlp
+    return nlp
+
+
+def _run_spacy(text, disable=(), model_name=DEFAULT_SPACY_MODEL):
+    """Runs spaCy on text, raising the length limit instead of crashing on long documents."""
+    nlp = get_spacy_nlp(model_name)
+    if len(text) >= nlp.max_length:
+        nlp.max_length = len(text) + 1
+    if disable:
+        present = [c for c in disable if c in nlp.pipe_names]
+        with nlp.select_pipes(disable=present):
+            return nlp(text)
+    return nlp(text)
+
+
+# Stop words (spaCy's English list), loaded on first use.
+# Negations are kept by remove_stop_words() by default because dropping them
+# flips meaning ("I do not like it" -> "like").
+NEGATION_WORDS = frozenset({
+    'no', 'not', 'nor', 'never', 'none', 'nobody', 'nothing', 'nowhere', 'neither',
+    "n't", 'cannot', 'without', 'n‘t', 'n’t',
+})
+_stop_words_cache = None
+
+
+def get_stop_words():
+    """Returns the English stop-word set (spaCy's list, loaded lazily)."""
+    global _stop_words_cache
+    if _stop_words_cache is None:
+        try:
+            from spacy.lang.en.stop_words import STOP_WORDS
+        except ImportError as e:
+            raise _missing_dependency('spacy', purpose='the stop-word list') from e
+        _stop_words_cache = frozenset(STOP_WORDS)
+    return _stop_words_cache
+
+
+# Lazy-loaded NaiveBayesAnalyzer instance (legacy sentiment method)
 _naive_bayes_analyzer = None
+
 
 def _get_naive_bayes_analyzer():
     global _naive_bayes_analyzer
     if _naive_bayes_analyzer is None:
+        _require_nltk('movie_reviews')
+        _import_textblob()
+        from textblob.sentiments import NaiveBayesAnalyzer
         _naive_bayes_analyzer = NaiveBayesAnalyzer()
     return _naive_bayes_analyzer
+
 
 def _clean_input(x):
     """
@@ -93,15 +230,21 @@ def _clean_input(x):
     """
     if x is None:
         return ""
-    if isinstance(x, float):
-        if math.isnan(x):
-            return ""
-    try:
-        import pandas as pd
-        if pd.isna(x):
-            return ""
-    except Exception:
-        pass
+    if isinstance(x, str):
+        return x
+    if isinstance(x, bytes):
+        return x.decode('utf-8', 'replace')
+    if isinstance(x, float) and math.isnan(x):
+        return ""
+    # Only consult pandas if the caller already imported it (no per-call import cost).
+    pd = sys.modules.get('pandas')
+    if pd is not None:
+        try:
+            r = pd.isna(x)
+            if getattr(r, 'ndim', 0) == 0 and r:
+                return ""
+        except Exception:
+            pass
     return str(x)
 
 # EMOJI REGEX PATTERN & MAPPING
@@ -158,7 +301,7 @@ def avg_word_len(x):
 def stop_words_count(x):
     """Returns the count of stopwords in text x."""
     text = _clean_input(x)
-    return len([word for word in text.lower().split() if word in sw])
+    return len([word for word in text.lower().split() if word in get_stop_words()])
 
 def hashtags_count(x):
     """Returns count of hashtags (#tag) in text x."""
@@ -301,6 +444,10 @@ def remove_html_tag(x):
     text = _clean_input(x)
     if not text:
         return ""
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError as e:
+        raise _missing_dependency('beautifulsoup4', purpose='remove_html_tag') from e
     return BeautifulSoup(text, 'lxml').get_text()
 
 def remove_accented_chars(x):
@@ -329,7 +476,7 @@ def remove_repeated_chars(x):
 def remove_stop_words(x):
     """Removes stop words from text x (case-insensitive check)."""
     text = _clean_input(x)
-    return " ".join([word for word in text.split() if word.lower() not in sw])
+    return " ".join([word for word in text.split() if word.lower() not in get_stop_words()])
 
 def remove_emojis(x):
     """Removes emoji characters from text x."""
@@ -406,13 +553,20 @@ def normalize_whitespace_and_casing(x):
 
 # Linguistic and Morphological Processing
 
+def _TextBlob(*args, **kwargs):
+    return _import_textblob().TextBlob(*args, **kwargs)
+
+
+def _Word(*args, **kwargs):
+    return _import_textblob().Word(*args, **kwargs)
+
+
 def convert_to_base(x):
     """Lemmatizes nouns and verbs in text x using spaCy while leaving other POS tags as-is."""
     text = _clean_input(x)
     if not text:
         return ""
-    nlp_model = get_spacy_nlp()
-    doc = nlp_model(text)
+    doc = _run_spacy(text, disable=('parser', 'ner'))
     tokens = []
     for token in doc:
         if token.pos_ in ['NOUN', 'VERB']:
@@ -428,8 +582,7 @@ def lemmatize(x):
     text = _clean_input(x)
     if not text:
         return ""
-    nlp_model = get_spacy_nlp()
-    doc = nlp_model(text)
+    doc = _run_spacy(text, disable=('parser', 'ner'))
     return ' '.join([token.lemma_ for token in doc])
 
 def extract_entities(x):
@@ -437,8 +590,7 @@ def extract_entities(x):
     text = _clean_input(x)
     if not text:
         return []
-    nlp_model = get_spacy_nlp()
-    doc = nlp_model(text)
+    doc = _run_spacy(text)
     return [(ent.text, ent.label_) for ent in doc.ents]
 
 def extract_pos_tags(x):
@@ -446,8 +598,7 @@ def extract_pos_tags(x):
     text = _clean_input(x)
     if not text:
         return []
-    nlp_model = get_spacy_nlp()
-    doc = nlp_model(text)
+    doc = _run_spacy(text)
     return [(token.text, token.pos_, token.tag_) for token in doc]
 
 def get_dependency_tree(x):
@@ -455,8 +606,7 @@ def get_dependency_tree(x):
     text = _clean_input(x)
     if not text:
         return []
-    nlp_model = get_spacy_nlp()
-    doc = nlp_model(text)
+    doc = _run_spacy(text)
     return [(token.text, token.dep_, token.head.text) for token in doc]
 
 def detect_language(x):
@@ -465,14 +615,14 @@ def detect_language(x):
     if not text:
         return "en"
     try:
-        return str(TextBlob(text).detect_language())
+        return str(_TextBlob(text).detect_language())
     except Exception:
         return "en"
 
 def keyword_extraction(x, top_n=5):
     """Extracts top_n keyword tokens based on term frequency."""
     text = _clean_input(x)
-    words = [w.lower() for w in re.findall(r'\b[a-zA-Z]{3,}\b', text) if w.lower() not in sw]
+    words = [w.lower() for w in re.findall(r'\b[a-zA-Z]{3,}\b', text) if w.lower() not in get_stop_words()]
     counts = {}
     for w in words:
         counts[w] = counts.get(w, 0) + 1
@@ -489,6 +639,7 @@ def text_similarity(x1, x2):
 
 def get_synonyms(word):
     """Returns a list of synonyms for a word using NLTK WordNet."""
+    _require_nltk('wordnet')   # raises a helpful LookupError if missing
     try:
         from nltk.corpus import wordnet
         synonyms = set()
@@ -501,6 +652,7 @@ def get_synonyms(word):
 
 def get_antonyms(word):
     """Returns a list of antonyms for a word using NLTK WordNet."""
+    _require_nltk('wordnet')   # raises a helpful LookupError if missing
     try:
         from nltk.corpus import wordnet
         antonyms = set()
@@ -517,7 +669,7 @@ def chunk_noun_phrases(x):
     text = _clean_input(x)
     if not text:
         return []
-    blob = TextBlob(text)
+    blob = _TextBlob(text)
     res = []
     for np_item in blob.noun_phrases:
         start = text.find(np_item)
@@ -528,14 +680,26 @@ def chunk_noun_phrases(x):
 def get_wordcloud(x, save_path=None, show=True):
     """Generates and optionally displays or saves a WordCloud for text x."""
     text = _clean_input(x)
-    cloud = WordCloud(width=800, height=500).generate(text if text else "empty")
+    if not text.strip():
+        warnings.warn("get_wordcloud received empty text; nothing to draw.")
+        return None
+    try:
+        from wordcloud import WordCloud
+    except ImportError as e:
+        raise _missing_dependency('wordcloud', extra='viz', purpose='get_wordcloud') from e
+    cloud = WordCloud(width=800, height=500).generate(text)
     if save_path:
         cloud.to_file(save_path)
     if show:
-        plt.figure(figsize=(15, 7), dpi=100)
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError as e:
+            raise _missing_dependency('matplotlib', extra='viz', purpose='get_wordcloud(show=True)') from e
+        fig = plt.figure(figsize=(15, 7), dpi=100)
         plt.imshow(cloud.to_image(), interpolation='bilinear')
         plt.axis('off')
         plt.show()
+        plt.close(fig)
     return cloud
 
 def correct_spelling(x):
@@ -543,7 +707,7 @@ def correct_spelling(x):
     text = _clean_input(x)
     words = []
     for word in text.split():
-        w = Word(word)
+        w = _Word(word)
         words.append(str(w.correct()))
     return ' '.join(words)
 
@@ -552,7 +716,7 @@ def get_noun_phrase(x):
     text = _clean_input(x)
     if not text:
         return []
-    blob = TextBlob(text)
+    blob = _TextBlob(text)
     return list(blob.noun_phrases)
 
 def n_grams(x, n=2):
@@ -560,14 +724,14 @@ def n_grams(x, n=2):
     text = _clean_input(x)
     if not text:
         return []
-    return list(TextBlob(text).ngrams(n))
+    return list(_TextBlob(text).ngrams(n))
 
 def singularize_words(x):
     """Converts plural nouns (NNS) to singular in text x using TextBlob."""
     text = _clean_input(x)
     if not text:
         return ""
-    blob = TextBlob(text)
+    blob = _TextBlob(text)
     return ' '.join([word.singularize() if tag in ['NNS'] else word for word, tag in blob.tags])
 
 def pluralize_words(x):
@@ -575,7 +739,7 @@ def pluralize_words(x):
     text = _clean_input(x)
     if not text:
         return ""
-    blob = TextBlob(text)
+    blob = _TextBlob(text)
     return ' '.join([word.pluralize() if tag in ['NN'] else word for word, tag in blob.tags])
 
 # Safety and Moderation
@@ -625,12 +789,12 @@ def sentiment_analysis(x):
     if not text:
         return "pos"
     analyzer = _get_naive_bayes_analyzer()
-    return TextBlob(text, analyzer=analyzer).sentiment.classification
+    return _TextBlob(text, analyzer=analyzer).sentiment.classification
 
 def polarity_subjectivity(x):
     """Returns pattern-based sentiment polarity (-1.0 to 1.0) and subjectivity (0.0 to 1.0)."""
     text = _clean_input(x)
-    blob = TextBlob(text)
+    blob = _TextBlob(text)
     return {'polarity': blob.sentiment.polarity, 'subjectivity': blob.sentiment.subjectivity}
 
 def emotion_detection(x):

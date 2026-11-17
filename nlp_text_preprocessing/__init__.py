@@ -7,6 +7,9 @@ from .all_text_preprocess import *
 __all__ = [
     '__version__',
     'download_nltk_packages',
+    'check_resources',
+    'get_spacy_nlp',
+    'get_stop_words',
     'word_count',
     'char_count',
     'avg_word_len',

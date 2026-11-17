@@ -36,13 +36,13 @@ dependencies = [
     "nltk",
     "beautifulsoup4",
     "lxml",
-    "pandas",
-    "wordcloud",
-    "matplotlib",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "build", "twine"]
+pandas = ["pandas"]
+viz = ["wordcloud", "matplotlib"]
+all = ["pandas", "wordcloud", "matplotlib"]
+dev = ["pytest", "build", "twine", "pandas", "wordcloud", "matplotlib"]
 
 [project.urls]
 Homepage = "https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing"

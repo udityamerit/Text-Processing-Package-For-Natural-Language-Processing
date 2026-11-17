@@ -3,6 +3,3 @@ textblob
 nltk
 beautifulsoup4
 lxml
-pandas
-wordcloud
-matplotlib
