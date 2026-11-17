@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
 
 ### Added
 - New optional extra `[transformers]` (installs `transformers`, for tokenizers used with `truncate_text` / `chunk_text`).
