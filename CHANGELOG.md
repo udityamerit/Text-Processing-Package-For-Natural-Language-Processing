@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1
+
+### Fixed
+- `mask_pii(..., names=True)` with a placeholder such as `<PII>` could produce `<<PII>`, because spaCy read the inserted placeholder as part of an entity. Names are now found on the original text before the other masking.
+
+### Changed
+- README: documents the 0.5.0 features (readability scores, name masking, batching, type hints, development tooling) with examples.
+
 ## 0.5.0
 
 ### Added
