@@ -50,19 +50,19 @@
 
 ## Package Overview
 
-**`nlp_text_preprocessing`** is a production-grade, modular Python library designed to streamline text cleaning, feature extraction, linguistic analysis, content moderation, and visualization for Natural Language Processing (NLP) pipelines and Machine Learning workflows.
+**`nlp_text_preprocessing`** is a modular Python library designed to streamline text cleaning, feature extraction, linguistic analysis, content moderation, and visualization for Natural Language Processing (NLP) pipelines and Machine Learning workflows.
 
 Maintained by **[Uditya Narayan Tiwari](https://udityanarayantiwari.netlify.app/)**.
 
-It provides over **60 single-purpose functions** and an extensible **Pipeline Engine** with built-in defensive guards for `None`, `NaN`, and missing values, making it 100% crash-proof when running over Pandas DataFrames or large raw text datasets.
+It provides over **60 single-purpose functions** and an extensible **Pipeline Engine** with defensive guards so `None`, `NaN` and missing values are treated as empty text, which makes it convenient to run over Pandas DataFrame columns and raw text datasets.
 
 ---
 
 ## Key Features
 
-- **Crash-Proof Pipeline**: Automatic `None`/`NaN` input sanitation across all functions.
+- **Safe Inputs**: `None`, `NaN`, `pd.NA` and bytes are handled by every function (treated as empty text).
 - **Pipeline Automation Engine**: Chain cleaning steps by name or custom functions via `Pipeline(['to_lower_case', 'remove_urls', 'lemmatize'])`.
-- **Lazy and Fast Model Caching**: Efficient lazy-loading for spaCy (`en_core_web_sm`) and cached NaiveBayes sentiment analyzers.
+- **Light Import, Lazy Models**: `import nlp_text_preprocessing` loads no heavy library and downloads nothing. spaCy, TextBlob and NLTK data are loaded on first use and cached.
 - **Advanced Cleaning**: Remove emojis, phone numbers, PII mask, URLs, emails, HTML, retweets, special symbols, and expand contractions/hashtags.
 - **Feature & Readability Extraction**: Extract word counts, sentence counts, readability scores (Flesch Ease), punctuation density, capital ratios, and full batch statistics.
 - **Linguistic Utilities**: Named Entity Recognition (NER), POS tagging, dependency parsing, language detection, keyword extraction, synonyms, antonyms, and n-grams.
@@ -86,19 +86,26 @@ The package integrates **spaCy**, **NLTK**, **TextBlob**, **BeautifulSoup4**, an
 ### 1. Installation
 
 ```bash
-pip install nlp-text-preprocessing
+pip install nlp-text-preprocessing            # core
+pip install "nlp-text-preprocessing[viz]"     # + wordcloud, matplotlib (get_wordcloud)
+pip install "nlp-text-preprocessing[pandas]"  # + pandas (text_stats_batch, Pipeline.run_series)
+pip install "nlp-text-preprocessing[all]"     # everything optional
 ```
 
 ### 2. Downloading Required Corpora and Models
 
-To automatically download all required NLTK corpora (`stopwords`, `movie_reviews`, `brown`) and spaCy models (`en_core_web_sm`), run:
+Nothing is downloaded behind your back. Run the one-time setup, which fetches the NLTK data (`punkt_tab`, `wordnet`, `omw-1.4`) and the spaCy model `en_core_web_sm`:
 
 ```python
 import nlp_text_preprocessing as tp
 
-# One-time automated setup for NLTK and spaCy resources
-tp.download_nltk_packages()
+tp.download_nltk_packages()                 # one-time setup
+tp.check_resources(verbose=True)            # see what is installed / missing
 ```
+
+`sentiment_analysis(x, method="naive_bayes")` additionally needs the `movie_reviews` corpus:
+`tp.download_nltk_packages(include_sentiment_corpus=True)`.
+Set the environment variable `NLP_TEXT_PREPROCESSING_AUTO_DOWNLOAD=1` if you want the spaCy model to be downloaded automatically on first use.
 
 ---
 
@@ -170,29 +177,29 @@ Below is the complete reference guide for all functions available in the library
 | `contraction_to_expansion(x)`| `x: str` | `str` | Expands contractions using contractions dictionary. |
 | `remove_emails(x)` | `x: str` | `str` | Removes email addresses from text. |
 | `count_emails(x)` | `x: str` | `int` | Counts email addresses present in text. |
-| `remove_urls(x)` | `x: str` | `str` | Removes HTTP/HTTPS links and `www` URLs. |
+| `remove_urls(x)` | `x: str` | `str` | Removes `http(s)://`, `ftp://` and `www.` URLs (trailing punctuation is kept). |
 | `count_urls(x)` | `x: str` | `int` | Counts URLs present in text. |
-| `remove_rt(x)` | `x: str` | `str` | Removes retweet headers (`RT @user`). |
+| `remove_rt(x)` | `x: str` | `str` | Removes retweet headers (`RT @user:`). |
 | `count_rt(x)` | `x: str` | `int` | Counts retweet occurrences in text. |
 | `remove_html_tag(x)` | `x: str` | `str` | Strips HTML/XML tags using BeautifulSoup. |
-| `remove_accented_chars(x)` | `x: str` | `str` | Normalizes accented characters (NFKD -> ASCII). |
+| `remove_accented_chars(x)` | `x: str` | `str` | Strips accents (`café` -> `cafe`); non-Latin scripts are kept. |
 | `remove_mentions(x)` | `x: str` | `str` | Removes user handle mentions (`@username`). |
-| `remove_special_chars(x)` | `x: str` | `str` | Strips punctuation and special symbols. |
-| `remove_repeated_chars(x)` | `x: str` | `str` | Truncates repeated characters beyond 2 consecutive occurrences. |
-| `remove_stop_words(x)` | `x: str` | `str` | Case-insensitive removal of stop words while preserving word case. |
-| `remove_emojis(x)` | `x: str` | `str` | Strips emoji characters from text. |
+| `remove_special_chars(x)` | `x: str` | `str` | Strips punctuation and symbols (`well-known` -> `well known`). |
+| `remove_repeated_chars(x)` | `x: str` | `str` | Shortens elongated words (`soooo` -> `soo`); digits and punctuation are untouched. |
+| `remove_stop_words(x, keep_negations=True)` | `x: str` | `str` | Removes stop words (case-insensitive); negations like `not` are kept by default. |
+| `remove_emojis(x)` | `x: str` | `str` | Strips emoji (flags, skin tones and ZWJ sequences included). |
 | `extract_emojis(x)` | `x: str` | `list[str]` | Returns list of emojis found in text. |
 | `emoji_to_text(x)` | `x: str` | `str` | Converts emojis to descriptive text (e.g. 😂 -> `face_with_tears_of_joy`). |
-| `remove_phone_numbers(x)` | `x: str` | `str` | Strips phone numbers from text. |
+| `remove_phone_numbers(x)` | `x: str` | `str` | Strips phone numbers (international formats; dates and decimals are ignored). |
 | `count_phone_numbers(x)` | `x: str` | `int` | Counts phone numbers present in text. |
-| `mask_pii(x)` | `x: str` | `str` | Redacts emails, phone numbers, and card numbers with `[REDACTED]`. |
+| `mask_pii(x, token='[REDACTED]')` | `x: str` | `str` | Redacts emails, card numbers, US SSNs and phone numbers. |
 | `remove_extra_whitespace(x)`| `x: str` | `str` | Collapses consecutive spaces, tabs, and newlines to a single space. |
-| `expand_hashtags(x)` | `x: str` | `str` | Splits camelCase/PascalCase hashtags (`#MachineLearning` -> `Machine Learning`). |
+| `expand_hashtags(x)` | `x: str` | `str` | Splits hashtags (`#MachineLearning2024` -> `Machine Learning 2024`). |
 | `normalize_unicode_punctuation(x)`| `x: str` | `str` | Replaces smart quotes, em-dashes, and ellipsis with ASCII equivalents. |
-| `remove_numbers(x)` | `x: str` | `str` | Strips all numeric digits. |
-| `remove_currency_symbols(x)`| `x: str` | `str` | Strips currency symbols (`$`, `€`, `₹`, `£`, `¥`). |
+| `remove_numbers(x)` | `x: str` | `str` | Removes standalone numbers; digits inside words (`3rd`, `H2O`) stay. |
+| `remove_currency_symbols(x)`| `x: str` | `str` | Strips every Unicode currency symbol. |
 | `normalize_whitespace_and_casing(x)`| `x: str` | `str` | Canonical combination of lowercasing and whitespace collapse. |
-| `clean_text(text)` | `text: str` | `str` | Runs end-to-end cleaning pipeline. |
+| `clean_text(text, remove_stopwords=False)` | `text: str` | `str` | End-to-end cleaning (HTML, URLs, emails, lower-case, contractions, punctuation, lemmatization). |
 
 ---
 
@@ -205,15 +212,15 @@ Below is the complete reference guide for all functions available in the library
 | `extract_entities(x)` | `x: str` | `list[tuple]` | Extracts named entities `(text, label)` using spaCy. |
 | `extract_pos_tags(x)` | `x: str` | `list[tuple]` | Extracts full POS tag breakdown `(token, pos, tag)` using spaCy. |
 | `get_dependency_tree(x)`| `x: str` | `list[tuple]` | Extracts dependency parse tree `(token, dep, head)` using spaCy. |
-| `detect_language(x)` | `x: str` | `str` | Detects language code (`'en'`, `'fr'`, etc.) using TextBlob. |
+| `detect_language(x)` | `x: str` | `str` | Language code (`'en'`, `'fr'`, `'hi'`, ...) via `langdetect`; `'unknown'` if undetectable. |
 | `keyword_extraction(x, top_n)`| `x: str, top_n: int`| `list[str]`| Extracts top N keywords by term frequency. |
 | `text_similarity(x1, x2)` | `x1, x2` | `float` | Calculates token Jaccard similarity between two texts (0.0 to 1.0). |
-| `get_synonyms(word)` | `word: str` | `list[str]` | Returns list of synonyms from WordNet. |
-| `get_antonyms(word)` | `word: str` | `list[str]` | Returns list of antonyms from WordNet. |
-| `chunk_noun_phrases(x)` | `x: str` | `list[dict]` | Extracts noun phrases with character start/end spans. |
-| `correct_spelling(x)` | `x: str` | `str` | Corrects word spelling using TextBlob model. |
+| `get_synonyms(word)` | `word: str` | `list[str]` | Sorted WordNet synonyms. |
+| `get_antonyms(word)` | `word: str` | `list[str]` | Sorted WordNet antonyms. |
+| `chunk_noun_phrases(x)` | `x: str` | `list[dict]` | spaCy noun chunks with exact character `start`/`end` offsets. |
+| `correct_spelling(x)` | `x: str` | `str` | Corrects misspelled words (TextBlob); punctuation, case, URLs and acronyms are preserved. |
 | `get_noun_phrase(x)` | `x: str` | `list[str]` | Extracts noun phrases from text. |
-| `n_grams(x, n=2)` | `x: str, n: int` | `list` | Generates word-level n-grams. |
+| `n_grams(x, n=2)` | `x: str, n: int` | `list[tuple]` | Word-level n-grams as tuples. |
 | `singularize_words(x)` | `x: str` | `str` | Converts plural nouns (`NNS`) into singular forms. |
 | `pluralize_words(x)` | `x: str` | `str` | Converts singular nouns (`NN`) into plural forms. |
 
@@ -227,7 +234,7 @@ Below is the complete reference guide for all functions available in the library
 | `censor_profanity(x)` | `x: str` | `str` | Censors profanity words with asterisks (`****`). |
 | `detect_toxicity(x)` | `x: str` | `float` | Calculates baseline toxicity score (0.0 to 1.0). |
 | `detect_spam_signals(x)` | `x: str` | `dict` | Returns spam flags for excessive caps, punctuation, and URL density. |
-| `sentiment_analysis(x)` | `x: str` | `str` | Returns sentiment classification (`'pos'` / `'neg'`) using cached NaiveBayes model. |
+| `sentiment_analysis(x, method='pattern')` | `x: str` | `str` | `'pos'` / `'neg'` / `'neu'`. Default is instant; `method='naive_bayes'` is the legacy opt-in model. |
 | `polarity_subjectivity(x)`| `x: str` | `dict` | Returns fast pattern-based sentiment polarity (-1.0 to 1.0) and subjectivity. |
 | `emotion_detection(x)` | `x: str` | `dict` | Calculates lexicon-based emotion counts (joy, anger, sadness, fear). |
 
@@ -321,10 +328,11 @@ tp.get_wordcloud(text, save_path="wordcloud.png", show=False)
 
 ## Troubleshooting and Resource Setup
 
-If any NLTK corpus or spaCy model throws a missing resource error during runtime, simply run:
+If a function reports a missing NLTK corpus or spaCy model, check what is missing and install it:
 
 ```python
 import nlp_text_preprocessing as tp
+tp.check_resources(verbose=True)
 tp.download_nltk_packages()
 ```
 
