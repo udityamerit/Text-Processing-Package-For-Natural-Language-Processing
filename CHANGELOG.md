@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 ### Added
 - `Pipeline` steps can take arguments: `('remove_stop_words', {'keep_negations': False})`. Arguments are checked when the pipeline is built.

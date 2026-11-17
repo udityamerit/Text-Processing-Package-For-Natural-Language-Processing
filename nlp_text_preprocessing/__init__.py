@@ -1,6 +1,6 @@
 # entry level code and import text preprocess
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .all_text_preprocess import *
 
