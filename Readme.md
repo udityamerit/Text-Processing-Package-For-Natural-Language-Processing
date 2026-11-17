@@ -31,6 +31,8 @@
 - [Architecture Diagram](#architecture-diagram)
 - [Quickstart and Setup](#quickstart-and-setup)
 - [Pipeline Automation Engine](#pipeline-automation-engine)
+- [Preparing Text for Transformers](#preparing-text-for-transformers-bert-gpt-)
+- [Command Line (`nlp-prep`)](#command-line-nlp-prep)
 - [Complete API Reference](#complete-api-reference)
   - [1. General Feature Extraction](#1-general-feature-extraction)
   - [2. Text Cleaning and Normalization](#2-text-cleaning-and-normalization)
@@ -169,6 +171,58 @@ for example `Pipeline(['to_lower_case', 'text_stats'])`.
 
 ---
 
+## Preparing Text for Transformers (BERT, GPT, ...)
+
+Modern models work best with *lightly* cleaned text: keep the case, punctuation and
+word forms, and only remove noise. `light_clean` does exactly that, and `truncate_text`
+/ `chunk_text` help you stay inside a model's token limit.
+
+```python
+import nlp_text_preprocessing as tp
+
+tp.light_clean("<p>Great &amp; fast!​ Visit https://x.com or mail me@x.com</p>",
+               urls='[URL]', emails='[EMAIL]')
+# 'Great & fast! Visit [URL] or mail [EMAIL]'
+
+# Use the real tokenizer so the limits are counted in model tokens
+from transformers import AutoTokenizer
+tok = AutoTokenizer.from_pretrained('bert-base-uncased')
+
+tp.truncate_text(long_text, 256, tokenizer=tok)
+chunks = tp.chunk_text(long_text, 256, overlap=32, tokenizer=tok)
+```
+
+Without a `tokenizer`, the limits are counted in whitespace-separated words.
+`tokenizer` may be a HuggingFace tokenizer (anything with `.tokenize()` and
+`.convert_tokens_to_string()`) or a plain function that returns a list of tokens.
+
+---
+
+## Command Line (`nlp-prep`)
+
+Installing the package also installs the `nlp-prep` command (`python -m nlp_text_preprocessing` works too).
+
+```bash
+# one document per line, written to a new file
+nlp-prep clean reviews.txt -o reviews_clean.txt
+
+# a CSV column (adds a 'text_clean' column; use --output-column text to overwrite)
+nlp-prep clean data.csv --column text -o data_clean.csv
+
+# standard input / output
+cat notes.txt | nlp-prep clean - --lowercase --url-token "[URL]"
+
+# classic cleaning, or your own steps / a saved Pipeline
+nlp-prep clean reviews.txt --mode standard --stopwords
+nlp-prep clean reviews.txt --steps to_lower_case,remove_urls
+nlp-prep clean reviews.txt --pipeline my_pipeline.json
+
+# check or install the NLTK data and spaCy model
+nlp-prep resources --download
+```
+
+---
+
 ## Complete API Reference
 
 Below is the complete reference guide for all functions available in the library:
@@ -227,6 +281,9 @@ Below is the complete reference guide for all functions available in the library
 | `remove_currency_symbols(x)`| `x: str` | `str` | Strips every Unicode currency symbol. |
 | `normalize_whitespace_and_casing(x)`| `x: str` | `str` | Canonical combination of lowercasing and whitespace collapse. |
 | `clean_text(text, remove_stopwords=False)` | `text: str` | `str` | End-to-end cleaning (HTML, URLs, emails, lower-case, contractions, punctuation, lemmatization). |
+| `light_clean(x, html=True, urls='', emails='', mentions=None, emojis=None, normalize='NFKC', keep_newlines=False, lowercase=False)` | `x: str` | `str` | Minimal cleaning for transformer models: Unicode normalisation, zero-width/control characters, HTML and entities, URLs/emails/mentions (remove, replace or keep), optional emoji handling. Case and punctuation are kept. |
+| `truncate_text(x, max_tokens, tokenizer=None)` | `x: str` | `str` | Keeps the first `max_tokens` tokens (words, or tokens of a HuggingFace-style tokenizer). |
+| `chunk_text(x, max_tokens, overlap=0, tokenizer=None)` | `x: str` | `list[str]` | Splits long text into pieces of at most `max_tokens`, with optional overlap. |
 
 ---
 

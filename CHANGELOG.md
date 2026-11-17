@@ -7,6 +7,9 @@
 - `Pipeline.save(path)` / `Pipeline.load(path)` (JSON), `to_config()` / `from_config()`. Custom callables must be registered with `@register_step`.
 - scikit-learn style methods on `Pipeline` (`fit`, `transform`, `fit_transform`, `get_params`, `set_params`) and a new `TextPreprocessor` transformer for `sklearn.pipeline` (optional `[sklearn]` extra).
 - `Pipeline.__len__`, and a `__repr__` that shows step arguments.
+- `light_clean()`: minimal, transformer-friendly cleaning (NFKC, zero-width and control characters, HTML and entities, URL/email/mention handling, optional emoji handling; case and punctuation are kept).
+- `truncate_text()` and `chunk_text()`: enforce a token limit with whitespace words or any HuggingFace-style tokenizer, with overlapping chunks.
+- Command line tool `nlp-prep` (also `python -m nlp_text_preprocessing`): `clean` for text files, CSV columns and stdin/stdout (`--mode light|standard`, `--steps`, `--pipeline`) and `resources` to check or download the NLTK data and spaCy model.
 
 ### Changed (moderation helpers)
 - `detect_profanity` / `censor_profanity`: a much larger word list in two tiers (strong and mild), matching of word endings and simple leetspeak, `Hell's Kitchen` is no longer flagged, and new options `include_mild`, `extra_words`, `allow_words` (and `mask_char` for censoring).

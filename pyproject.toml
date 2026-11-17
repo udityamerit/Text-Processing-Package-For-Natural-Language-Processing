@@ -47,6 +47,9 @@ sklearn = ["scikit-learn"]
 all = ["pandas", "wordcloud", "matplotlib", "scikit-learn"]
 dev = ["pytest", "build", "twine", "pandas", "wordcloud", "matplotlib", "scikit-learn"]
 
+[project.scripts]
+nlp-prep = "nlp_text_preprocessing.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing"
 "Source Code" = "https://github.com/udityamerit/Text-Processing-Package-For-Natural-Language-Processing"

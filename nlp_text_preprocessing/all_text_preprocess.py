@@ -958,6 +958,117 @@ def pluralize_words(x):
     """
     return _inflect(_clean_input(x), 'NN', 'pluralize')
 
+# Transformer-friendly cleaning
+
+_ZERO_WIDTH_RE = re.compile('[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00ad]')
+_CONTROL_RE = re.compile('[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]')
+_MARKUP_RE = re.compile(r'</?[A-Za-z][^>]*>|<!--|&(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z]+);')
+
+
+def light_clean(x, html=True, urls='', emails='', mentions=None, emojis=None,
+                normalize='NFKC', keep_newlines=False, lowercase=False):
+    """
+    Minimal cleaning for BERT / GPT style models, which want natural text.
+
+    Unlike :func:`clean_text` it keeps case, punctuation, stop words and word forms, so
+    the tokenizer sees what it was trained on. It only removes noise:
+
+    html          strip tags and decode entities (``&amp;``)
+    urls/emails/mentions
+                  ``None`` keeps them, ``''`` removes them, any other string replaces
+                  them (``urls='[URL]'``). ``mentions`` defaults to keeping them.
+    emojis        ``None`` keeps them, ``'remove'`` drops them, ``'text'`` turns them
+                  into ``:name:`` words.
+    normalize     Unicode form (``'NFKC'`` by default, ``None`` to skip).
+    keep_newlines keep line breaks (collapsing blank lines) instead of one long line.
+    lowercase     lower-case the result (for uncased models).
+
+    Zero-width and control characters are always removed, and whitespace is collapsed.
+    """
+    if emojis not in (None, 'remove', 'text'):
+        raise ValueError("emojis must be None, 'remove' or 'text'")
+    text = _clean_input(x)
+    if not text:
+        return ""
+    if normalize:
+        text = unicodedata.normalize(normalize, text)
+    text = _ZERO_WIDTH_RE.sub('', text)
+    text = _CONTROL_RE.sub(' ', text)
+    if html and _MARKUP_RE.search(text):
+        text = remove_html_tag(text)
+        import html as _html
+        text = _html.unescape(text)
+
+    def _swap(pattern, replacement):
+        nonlocal text
+        if replacement is not None:
+            text = pattern.sub(lambda m: replacement, text)
+
+    _swap(_URL_RE, urls)
+    _swap(_EMAIL_RE, emails)
+    _swap(_MENTION_RE, mentions)
+    if emojis == 'remove':
+        text = remove_emojis(text)
+    elif emojis == 'text':
+        text = emoji_to_text(text)
+
+    if keep_newlines:
+        lines = (re.sub(r'[^\S\n]+', ' ', line).strip() for line in text.split('\n'))
+        text = '\n'.join(line for line in lines if line)
+    else:
+        text = re.sub(r'\s+', ' ', text).strip()
+    return text.lower() if lowercase else text
+
+
+def _tokenize_for_limit(tokenizer, text):
+    """Returns ``(tokens, detokenize)`` for a HuggingFace-style tokenizer, a callable, or None."""
+    if tokenizer is None:                       # whitespace words as a rough stand-in
+        return text.split(), ' '.join
+    if hasattr(tokenizer, 'tokenize'):          # HuggingFace tokenizer object
+        detok = getattr(tokenizer, 'convert_tokens_to_string', None) or ' '.join
+        return list(tokenizer.tokenize(text)), detok
+    if callable(tokenizer):
+        return list(tokenizer(text)), ' '.join
+    raise TypeError("tokenizer must be None, a callable, or an object with a .tokenize() method")
+
+
+def truncate_text(x, max_tokens, tokenizer=None):
+    """
+    Cuts text x to at most ``max_tokens`` tokens.
+
+    ``tokenizer`` can be a HuggingFace tokenizer (``AutoTokenizer.from_pretrained(...)``),
+    or any callable that returns a list of tokens. Without one, whitespace-separated words
+    are used as a rough stand-in, which under-counts for sub-word models: leave some margin
+    (and remember special tokens such as [CLS] / [SEP] also count towards a model's limit).
+    """
+    if max_tokens < 1:
+        raise ValueError("max_tokens must be at least 1")
+    text = _clean_input(x)
+    tokens, detokenize = _tokenize_for_limit(tokenizer, text)
+    if len(tokens) <= max_tokens:
+        return text.strip() if tokenizer is None else text
+    return detokenize(tokens[:max_tokens])
+
+
+def chunk_text(x, max_tokens, overlap=0, tokenizer=None):
+    """
+    Splits long text into chunks of at most ``max_tokens`` tokens, each starting
+    ``max_tokens - overlap`` tokens after the previous one (for long documents that
+    exceed a model's input limit). See :func:`truncate_text` for ``tokenizer``.
+    """
+    if max_tokens < 1:
+        raise ValueError("max_tokens must be at least 1")
+    if not 0 <= overlap < max_tokens:
+        raise ValueError("overlap must be between 0 and max_tokens - 1")
+    tokens, detokenize = _tokenize_for_limit(tokenizer, _clean_input(x))
+    chunks = []
+    step = max_tokens - overlap
+    for start in range(0, len(tokens), step):
+        chunks.append(detokenize(tokens[start:start + max_tokens]))
+        if start + max_tokens >= len(tokens):
+            break
+    return chunks
+
 # Safety and Moderation
 
 _LEET = str.maketrans({'0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's'})
